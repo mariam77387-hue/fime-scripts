@@ -10,21 +10,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     try {
-        const response = await fetch("data/scripts.json", {
-            cache: "no-cache"
+        const response = await fetch("/api/scripts", {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+                "Accept": "application/json"
+            }
         });
 
         if (!response.ok) {
-            throw new Error("Failed to load scripts");
+            throw new Error(`API error: ${response.status}`);
         }
 
         const data = await response.json();
 
         if (!Array.isArray(data)) {
-            throw new Error("Invalid scripts.json format");
+            throw new Error("Invalid API response");
         }
 
-        allScripts = data.filter(isValidScript);
+        allScripts = data;
 
         if (scriptsGrid) {
             setupScriptsPage();
@@ -35,36 +39,35 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
     } catch (error) {
-        console.error("Fime Scripts error:", error);
+        console.error("Failed to load scripts:", error);
 
         if (scriptsGrid) {
-            showLoadError(scriptsGrid);
+            scriptsGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">!</div>
+                    <h3>تعذر تحميل السكربتات</h3>
+                    <p>حدث خطأ أثناء الاتصال بالموقع. حاول مرة أخرى لاحقًا.</p>
+                </div>
+            `;
         }
 
         if (hacksGrid) {
-            showLoadError(hacksGrid);
+            hacksGrid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">!</div>
+                    <h3>تعذر تحميل الهاكات</h3>
+                    <p>حاول تحديث الصفحة مرة أخرى.</p>
+                </div>
+            `;
         }
     }
 });
 
 
 /*
- * VALIDATE SCRIPT
- */
-
-function isValidScript(script) {
-    return (
-        script &&
-        typeof script.id === "string" &&
-        typeof script.name === "string" &&
-        typeof script.description === "string" &&
-        typeof script.code === "string"
-    );
-}
-
-
-/*
+ * =========================
  * SCRIPTS PAGE
+ * =========================
  */
 
 function setupScriptsPage() {
@@ -77,17 +80,13 @@ function setupScriptsPage() {
     createCategoryFilters(filterContainer);
 
     renderScripts(
-        getFilteredScripts(
-            searchInput?.value || ""
-        )
+        getFilteredScripts(searchInput?.value || "")
     );
 
     if (searchInput) {
         searchInput.addEventListener("input", () => {
             renderScripts(
-                getFilteredScripts(
-                    searchInput.value
-                )
+                getFilteredScripts(searchInput.value)
             );
         });
     }
@@ -95,27 +94,22 @@ function setupScriptsPage() {
 
 
 /*
+ * =========================
  * HACKS PAGE
+ * =========================
  */
 
 function setupHacksPage() {
-    const hacks =
-        allScripts.filter(script => {
-            const type =
-                String(script.type || "")
-                    .trim()
-                    .toLowerCase();
+    const hacks = allScripts.filter(script => {
+        const type = String(script.type || "").toLowerCase();
+        const category = String(script.category || "").toLowerCase();
 
-            const category =
-                String(script.category || "")
-                    .trim()
-                    .toLowerCase();
-
-            return (
-                type === "hack" ||
-                category === "hacks"
-            );
-        });
+        return (
+            type === "hack" ||
+            category === "hacks" ||
+            category === "hack"
+        );
+    });
 
     const grid =
         document.getElementById("hacksGrid");
@@ -144,7 +138,9 @@ function setupHacksPage() {
 
 
 /*
+ * =========================
  * CATEGORY FILTERS
+ * =========================
  */
 
 function createCategoryFilters(container) {
@@ -161,26 +157,24 @@ function createCategoryFilters(container) {
         "filter-btn active";
 
     allButton.dataset.category = "all";
-
     allButton.textContent = "الكل";
 
     allButton.addEventListener("click", () => {
         currentCategory = "all";
 
-        setActiveFilter(
-            container,
-            allButton
-        );
-
-        const search =
-            document.getElementById(
-                "scriptSearch"
+        container
+            .querySelectorAll(".filter-btn")
+            .forEach(btn =>
+                btn.classList.remove("active")
             );
 
+        allButton.classList.add("active");
+
+        const search =
+            document.getElementById("scriptSearch");
+
         renderScripts(
-            getFilteredScripts(
-                search?.value || ""
-            )
+            getFilteredScripts(search?.value || "")
         );
     });
 
@@ -190,12 +184,8 @@ function createCategoryFilters(container) {
     const categories = [
         ...new Set(
             allScripts
-                .map(script =>
-                    String(
-                        script.category || ""
-                    ).trim()
-                )
-                .filter(Boolean)
+                .map(script => script.category)
+                .filter(category => category)
         )
     ];
 
@@ -214,23 +204,21 @@ function createCategoryFilters(container) {
             category;
 
         button.addEventListener("click", () => {
-            currentCategory =
-                category;
+            currentCategory = category;
 
-            setActiveFilter(
-                container,
-                button
-            );
-
-            const search =
-                document.getElementById(
-                    "scriptSearch"
+            container
+                .querySelectorAll(".filter-btn")
+                .forEach(btn =>
+                    btn.classList.remove("active")
                 );
 
+            button.classList.add("active");
+
+            const search =
+                document.getElementById("scriptSearch");
+
             renderScripts(
-                getFilteredScripts(
-                    search?.value || ""
-                )
+                getFilteredScripts(search?.value || "")
             );
         });
 
@@ -239,22 +227,10 @@ function createCategoryFilters(container) {
 }
 
 
-function setActiveFilter(
-    container,
-    activeButton
-) {
-    container
-        .querySelectorAll(".filter-btn")
-        .forEach(button => {
-            button.classList.remove("active");
-        });
-
-    activeButton.classList.add("active");
-}
-
-
 /*
+ * =========================
  * FILTER
+ * =========================
  */
 
 function getFilteredScripts(searchText) {
@@ -269,14 +245,17 @@ function getFilteredScripts(searchText) {
             script.category === currentCategory;
 
         const searchableText = [
+            script.title,
             script.name,
             script.description,
             script.category,
+            script.game,
             script.type,
             ...(Array.isArray(script.tags)
                 ? script.tags
                 : [])
         ]
+            .filter(Boolean)
             .join(" ")
             .toLowerCase();
 
@@ -284,16 +263,15 @@ function getFilteredScripts(searchText) {
             !query ||
             searchableText.includes(query);
 
-        return (
-            matchesCategory &&
-            matchesSearch
-        );
+        return matchesCategory && matchesSearch;
     });
 }
 
 
 /*
+ * =========================
  * RENDER
+ * =========================
  */
 
 function renderScripts(
@@ -325,34 +303,46 @@ function renderScripts(
         scripts
             .map(createScriptCard)
             .join("");
+
+    setupCardButtons(target);
 }
 
 
 /*
- * CARD
+ * =========================
+ * SCRIPT CARD
+ * =========================
  */
 
 function createScriptCard(script) {
     const tags =
-        (
-            Array.isArray(script.tags)
-                ? script.tags
-                : []
-        )
+        (Array.isArray(script.tags)
+            ? script.tags
+            : [])
             .slice(0, 4)
-            .map(tag => {
-                return `
-                    <span class="tag">
-                        ${escapeHTML(tag)}
-                    </span>
-                `;
-            })
+            .map(tag => `
+                <span class="tag">
+                    ${escapeHTML(tag)}
+                </span>
+            `)
             .join("");
 
 
-    const isHack =
-        String(script.type || "")
-            .toLowerCase() === "hack";
+    const scriptName =
+        script.title ||
+        script.name ||
+        "بدون اسم";
+
+
+    const type =
+        String(script.type || "Script")
+            .toLowerCase();
+
+
+    const icon =
+        type === "hack"
+            ? "🧩"
+            : "📜";
 
 
     return `
@@ -361,7 +351,7 @@ function createScriptCard(script) {
             <div class="script-card-top">
 
                 <div class="script-icon">
-                    ${isHack ? "🧩" : "📜"}
+                    ${icon}
                 </div>
 
                 <span class="script-category">
@@ -374,7 +364,7 @@ function createScriptCard(script) {
 
 
             <h3>
-                ${escapeHTML(script.name)}
+                ${escapeHTML(scriptName)}
             </h3>
 
 
@@ -383,6 +373,17 @@ function createScriptCard(script) {
                     script.description || ""
                 )}
             </p>
+
+
+            ${
+                script.game
+                    ? `
+                        <div class="script-game">
+                            🎮 ${escapeHTML(script.game)}
+                        </div>
+                    `
+                    : ""
+            }
 
 
             <div class="script-tags">
@@ -394,22 +395,19 @@ function createScriptCard(script) {
 
                 <a
                     class="card-btn primary"
-                    href="script.html?id=${encodeURIComponent(
-                        script.id
-                    )}"
-                >
-                    عرض
+                    href="script.html?id=${encodeURIComponent(script.id)}">
+
+                    عرض السكربت
+
                 </a>
 
-
                 <button
-                    class="card-btn"
+                    class="card-btn copy-script-btn"
                     type="button"
-                    data-copy-script="${escapeHTML(
-                        script.id
-                    )}"
-                >
+                    data-script-id="${escapeHTML(script.id)}">
+
                     نسخ
+
                 </button>
 
             </div>
@@ -420,33 +418,35 @@ function createScriptCard(script) {
 
 
 /*
- * COPY BUTTON
- *
- * بدل onclick داخل HTML،
- * نستخدم event delegation.
+ * =========================
+ * CARD BUTTONS
+ * =========================
  */
 
-document.addEventListener("click", event => {
-    const button =
-        event.target.closest(
-            "[data-copy-script]"
+function setupCardButtons(target) {
+    const buttons =
+        target.querySelectorAll(
+            ".copy-script-btn"
         );
 
-    if (!button) {
-        return;
-    }
+    buttons.forEach(button => {
+        button.addEventListener("click", () => {
+            copyScript(button.dataset.scriptId);
+        });
+    });
+}
 
-    const id =
-        button.dataset.copyScript;
 
-    copyScript(id);
-});
-
+/*
+ * =========================
+ * COPY
+ * =========================
+ */
 
 async function copyScript(id) {
     const script =
         allScripts.find(
-            item => item.id === id
+            item => String(item.id) === String(id)
         );
 
     if (!script) {
@@ -456,64 +456,52 @@ async function copyScript(id) {
 
     try {
         await navigator.clipboard.writeText(
-            script.code
+            script.code || ""
         );
 
-        showToast(
-            "تم نسخ السكربت ✓"
-        );
+        showToast("تم نسخ السكربت!");
 
     } catch (error) {
-        console.error(error);
-
-        showToast(
-            "تعذر نسخ السكربت."
-        );
+        console.error("Copy failed:", error);
+        showToast("تعذر نسخ السكربت.");
     }
 }
 
 
 /*
+ * =========================
  * TOAST
+ * =========================
  */
 
 function showToast(message) {
     let toast =
-        document.getElementById(
-            "fimeToast"
-        );
+        document.getElementById("fimeToast");
 
     if (!toast) {
         toast =
             document.createElement("div");
 
-        toast.id =
-            "fimeToast";
+        toast.id = "fimeToast";
 
-        Object.assign(
-            toast.style,
-            {
-                position: "fixed",
-                bottom: "25px",
-                left: "50%",
-                transform: "translateX(-50%)",
-                zIndex: "9999",
-                padding: "12px 18px",
-                borderRadius: "10px",
-                background: "#161923",
-                border: "1px solid rgba(255,255,255,.1)",
-                color: "white",
-                fontSize: "14px",
-                opacity: "0",
-                transition: "opacity .2s ease"
-            }
-        );
+        toast.style.position = "fixed";
+        toast.style.bottom = "25px";
+        toast.style.left = "50%";
+        toast.style.transform = "translateX(-50%)";
+        toast.style.zIndex = "9999";
+        toast.style.padding = "12px 18px";
+        toast.style.borderRadius = "10px";
+        toast.style.background = "#161923";
+        toast.style.border =
+            "1px solid rgba(255,255,255,.1)";
+        toast.style.color = "white";
+        toast.style.fontSize = "14px";
+        toast.style.transition = "opacity .2s";
 
         document.body.appendChild(toast);
     }
 
     toast.textContent = message;
-
     toast.style.opacity = "1";
 
     clearTimeout(
@@ -528,32 +516,9 @@ function showToast(message) {
 
 
 /*
- * ERROR
- */
-
-function showLoadError(target) {
-    target.innerHTML = `
-        <div class="empty-state">
-
-            <div class="empty-icon">
-                !
-            </div>
-
-            <h3>
-                تعذر تحميل السكربتات
-            </h3>
-
-            <p>
-                حاول تحديث الصفحة مرة أخرى.
-            </p>
-
-        </div>
-    `;
-}
-
-
-/*
- * SECURITY / HTML HELPERS
+ * =========================
+ * SECURITY
+ * =========================
  */
 
 function escapeHTML(value) {
