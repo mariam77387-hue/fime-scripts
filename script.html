@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 
 <head>
 
@@ -9,7 +9,11 @@
         name="viewport"
         content="width=device-width, initial-scale=1.0">
 
-    <title>Script — Fime</title>
+    <meta
+        name="description"
+        content="عرض سكربت من مكتبة Fime">
+
+    <title>السكربت — Fime</title>
 
     <link
         rel="stylesheet"
@@ -21,11 +25,15 @@
 <body>
 
 
+<!-- =====================================================
+     NAVBAR
+     ===================================================== -->
+
 <header class="navbar">
 
     <div class="container nav-container">
 
-        <a href="index.html" class="logo">
+        <a href="/" class="logo">
 
             <span class="logo-mark">
                 F
@@ -40,15 +48,15 @@
 
         <nav class="nav-links">
 
-            <a href="index.html">
-                Home
+            <a href="/">
+                الرئيسية
             </a>
 
-            <a href="scripts.html" class="active">
-                Scripts
+            <a href="/scripts" class="active">
+                السكربتات
             </a>
 
-            <a href="hacks.html">
+            <a href="/hacks">
                 Hacks
             </a>
 
@@ -57,7 +65,9 @@
 
         <button
             class="mobile-menu-btn"
-            id="mobileMenuBtn">
+            id="mobileMenuBtn"
+            type="button"
+            aria-label="فتح القائمة">
 
             ☰
 
@@ -68,22 +78,32 @@
 </header>
 
 
-<div class="mobile-menu" id="mobileMenu">
+<!-- =====================================================
+     MOBILE MENU
+     ===================================================== -->
 
-    <a href="index.html">
-        Home
+<div
+    class="mobile-menu"
+    id="mobileMenu">
+
+    <a href="/">
+        الرئيسية
     </a>
 
-    <a href="scripts.html">
-        Scripts
+    <a href="/scripts">
+        السكربتات
     </a>
 
-    <a href="hacks.html">
+    <a href="/hacks">
         Hacks
     </a>
 
 </div>
 
+
+<!-- =====================================================
+     MAIN
+     ===================================================== -->
 
 <main>
 
@@ -91,20 +111,39 @@
 
     <div class="container">
 
+
+        <!-- العودة -->
+
         <a
-            href="scripts.html"
+            href="/scripts"
             class="back-link">
 
-            ← Back to Scripts
+            → العودة إلى السكربتات
 
         </a>
 
+
+        <!-- =================================================
+             SCRIPT DETAILS
+             يتم تعبئته بواسطة script-page.js
+             ================================================= -->
 
         <div
             id="scriptDetails"
             class="script-details">
 
+            <div class="script-loading">
+
+                <div class="loading-spinner"></div>
+
+                <p>
+                    جاري تحميل السكربت...
+                </p>
+
+            </div>
+
         </div>
+
 
     </div>
 
@@ -113,9 +152,14 @@
 </main>
 
 
+<!-- =====================================================
+     FOOTER
+     ===================================================== -->
+
 <footer>
 
     <div class="container footer-content">
+
 
         <div>
 
@@ -131,8 +175,9 @@
 
             </div>
 
+
             <p>
-                A clean and organized script library.
+                مكتبة سكربتات مرتبة وسهلة الاستخدام.
             </p>
 
         </div>
@@ -140,15 +185,15 @@
 
         <div class="footer-links">
 
-            <a href="index.html">
-                Home
+            <a href="/">
+                الرئيسية
             </a>
 
-            <a href="scripts.html">
-                Scripts
+            <a href="/scripts">
+                السكربتات
             </a>
 
-            <a href="hacks.html">
+            <a href="/hacks">
                 Hacks
             </a>
 
@@ -159,15 +204,23 @@
 
     <div class="container footer-bottom">
 
-        © 2026 Fime. All rights reserved.
+        © 2026 Fime. جميع الحقوق محفوظة.
 
     </div>
 
 </footer>
 
 
+<!-- =====================================================
+     SCRIPTS
+     ===================================================== -->
+
 <script src="js/app.js"></script>
+
 <script src="js/script-page.js"></script>
+
+<script src="js/command-bar.js"></script>
+
 
 </body>
 
