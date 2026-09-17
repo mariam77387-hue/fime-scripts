@@ -119,6 +119,7 @@ def security_headers(response):
 # =========================================================
 
 def get_db():
+
     conn = sqlite3.connect(
         DB_PATH,
         timeout=10
@@ -130,12 +131,6 @@ def get_db():
 
 
 def get_table_columns(conn, table_name):
-    """
-    يرجع أسماء الأعمدة الموجودة في الجدول.
-
-    أسماء الجداول هنا ثابتة من داخل الكود
-    وليست قادمة من المستخدم.
-    """
 
     rows = conn.execute(
         f"PRAGMA table_info({table_name})"
@@ -154,9 +149,6 @@ def add_column_if_missing(
     column_name,
     definition
 ):
-    """
-    يضيف العمود فقط إذا لم يكن موجودًا.
-    """
 
     if column_name not in columns:
 
@@ -171,19 +163,12 @@ def add_column_if_missing(
 
 
 def migrate_scripts_table(conn):
-    """
-    Migration لقاعدة البيانات القديمة.
-
-    الهدف:
-    - الحفاظ على السكربتات الموجودة.
-    - إضافة الأعمدة الجديدة إذا كانت ناقصة.
-    - دعم قواعد البيانات التي كانت تستخدم name بدل title.
-    """
 
     columns = get_table_columns(
         conn,
         "scripts"
     )
+
 
     # -----------------------------------------------------
     # title
@@ -200,60 +185,32 @@ def migrate_scripts_table(conn):
 
         columns.add("title")
 
-        # بعض النسخ القديمة كانت تستخدم name
-        if "name" in columns:
 
-            conn.execute(
-                """
-                UPDATE scripts
-                SET title = COALESCE(
-                    NULLIF(TRIM(title), ''),
-                    name,
-                    'بدون عنوان'
-                )
-                WHERE title IS NULL
-                   OR TRIM(title) = ''
-                """
+    if "name" in columns:
+
+        conn.execute(
+            """
+            UPDATE scripts
+            SET title = COALESCE(
+                NULLIF(TRIM(title), ''),
+                name,
+                'بدون عنوان'
             )
-
-        else:
-
-            conn.execute(
-                """
-                UPDATE scripts
-                SET title = 'بدون عنوان'
-                WHERE title IS NULL
-                   OR TRIM(title) = ''
-                """
-            )
+            WHERE title IS NULL
+               OR TRIM(title) = ''
+            """
+        )
 
     else:
 
-        if "name" in columns:
-
-            conn.execute(
-                """
-                UPDATE scripts
-                SET title = COALESCE(
-                    NULLIF(TRIM(title), ''),
-                    name,
-                    'بدون عنوان'
-                )
-                WHERE title IS NULL
-                   OR TRIM(title) = ''
-                """
-            )
-
-        else:
-
-            conn.execute(
-                """
-                UPDATE scripts
-                SET title = 'بدون عنوان'
-                WHERE title IS NULL
-                   OR TRIM(title) = ''
-                """
-            )
+        conn.execute(
+            """
+            UPDATE scripts
+            SET title = 'بدون عنوان'
+            WHERE title IS NULL
+               OR TRIM(title) = ''
+            """
+        )
 
 
     # -----------------------------------------------------
@@ -349,9 +306,6 @@ def migrate_scripts_table(conn):
 
     # -----------------------------------------------------
     # created_at
-    #
-    # لا نستخدم CURRENT_TIMESTAMP في ALTER TABLE
-    # لأن SQLite لا يسمح به كـ default في بعض الحالات.
     # -----------------------------------------------------
 
     add_column_if_missing(
@@ -462,9 +416,9 @@ def init_db():
 
     try:
 
-        # -------------------------------------------------
+        # =================================================
         # Categories
-        # -------------------------------------------------
+        # =================================================
 
         conn.execute(
             """
@@ -478,9 +432,9 @@ def init_db():
         )
 
 
-        # -------------------------------------------------
+        # =================================================
         # Scripts
-        # -------------------------------------------------
+        # =================================================
 
         conn.execute(
             """
@@ -501,18 +455,16 @@ def init_db():
         )
 
 
-        # -------------------------------------------------
-        # Migration للـ scripts القديمة
-        # -------------------------------------------------
+        # =================================================
+        # Migration
+        # =================================================
 
-        migrate_scripts_table(
-            conn
-        )
+        migrate_scripts_table(conn)
 
 
-        # -------------------------------------------------
+        # =================================================
         # Default Categories
-        # -------------------------------------------------
+        # =================================================
 
         conn.execute(
             """
@@ -533,12 +485,9 @@ def init_db():
         )
 
 
-        # -------------------------------------------------
-        # Old database compatibility
-        #
-        # إذا كان عندك سكربتات قديمة بتصنيفات لم تكن موجودة
-        # في جدول categories، نضيفها تلقائياً.
-        # -------------------------------------------------
+        # =================================================
+        # Import Old Categories
+        # =================================================
 
         old_categories = conn.execute(
             """
@@ -548,6 +497,7 @@ def init_db():
               AND TRIM(category) != ''
             """
         ).fetchall()
+
 
         for row in old_categories:
 
@@ -610,12 +560,10 @@ def clean_text(value, max_length=10000):
 
 def clean_title(value):
 
-    value = clean_text(
+    return clean_text(
         value,
         200
     )
-
-    return value
 
 
 def valid_image_url(value):
@@ -679,6 +627,19 @@ def owner_required(function):
 
 @app.route("/")
 def home():
+
+    return send_from_directory(
+        BASE_DIR,
+        "index.html"
+    )
+
+
+# =========================================================
+# Support / Direct index.html
+# =========================================================
+
+@app.route("/index.html")
+def index_html():
 
     return send_from_directory(
         BASE_DIR,
@@ -781,6 +742,7 @@ def protected_files(filename):
         "__pycache__",
     )
 
+
     for item in blocked:
 
         if (
@@ -789,10 +751,13 @@ def protected_files(filename):
                 item + "/"
             )
         ):
+
             abort(404)
+
 
     if ".." in filename:
         abort(404)
+
 
     abort(404)
 
@@ -808,10 +773,12 @@ def owner_login():
         silent=True
     ) or {}
 
+
     username = clean_text(
         data.get("username"),
         200
     )
+
 
     password = data.get("password")
 
@@ -820,11 +787,6 @@ def owner_login():
 
     password = str(password)
 
-
-    # -----------------------------------------------------
-    # يسمح بإرسال username فارغ من command-bar
-    # ويستخدم OWNER_USERNAME الموجود في Render
-    # -----------------------------------------------------
 
     if not username:
         username = OWNER_USERNAME
@@ -891,6 +853,7 @@ def owner_me():
             "owner_authenticated"
         ) is True
     )
+
 
     return jsonify({
         "authenticated": authenticated
@@ -1216,13 +1179,6 @@ def create_script():
     )
 
 
-    # =====================================================
-    # التصنيف اختياري
-    #
-    # إذا كان فاضي نحفظه كـ ""
-    # ولا نرفض عملية النشر.
-    # =====================================================
-
     category = clean_text(
         data.get("category"),
         100
@@ -1242,8 +1198,7 @@ def create_script():
     try:
 
         # -------------------------------------------------
-        # إذا تم اختيار تصنيف، نتأكد أنه موجود.
-        # إذا كان فارغًا، نسمح بالنشر بدون تصنيف.
+        # التصنيف اختياري
         # -------------------------------------------------
 
         if category:
@@ -1265,15 +1220,12 @@ def create_script():
                 }), 400
 
 
-            # -------------------------------------------------
-            # نحفظ الاسم الرسمي الموجود في DB
-            # -------------------------------------------------
-
+            # الاسم الرسمي للتصنيف
             category = category_exists["name"]
 
 
         # -------------------------------------------------
-        # إنشاء السكربت
+        # Insert
         # -------------------------------------------------
 
         cursor = conn.execute(
@@ -1310,10 +1262,6 @@ def create_script():
         script_id = cursor.lastrowid
 
 
-        # -------------------------------------------------
-        # جلب السكربت بعد إنشائه
-        # -------------------------------------------------
-
         row = conn.execute(
             """
             SELECT *
@@ -1329,6 +1277,7 @@ def create_script():
             "script": row_to_script(row)
         }), 201
 
+
     except sqlite3.Error as error:
 
         conn.rollback()
@@ -1338,6 +1287,7 @@ def create_script():
             error
         )
 
+
         return jsonify({
             "success": False,
             "error": (
@@ -1345,6 +1295,7 @@ def create_script():
                 "أثناء نشر السكربت."
             )
         }), 500
+
 
     finally:
         conn.close()
@@ -1436,7 +1387,7 @@ def update_script(script_id):
 
 
         # -------------------------------------------------
-        # التصنيف اختياري حتى عند التعديل
+        # التصنيف اختياري
         # -------------------------------------------------
 
         if category:
@@ -1462,7 +1413,7 @@ def update_script(script_id):
 
 
         # -------------------------------------------------
-        # تحديث السكربت
+        # Update
         # -------------------------------------------------
 
         conn.execute(
@@ -1510,6 +1461,7 @@ def update_script(script_id):
             "script": row_to_script(row)
         })
 
+
     except sqlite3.Error as error:
 
         conn.rollback()
@@ -1519,6 +1471,7 @@ def update_script(script_id):
             error
         )
 
+
         return jsonify({
             "success": False,
             "error": (
@@ -1526,6 +1479,7 @@ def update_script(script_id):
                 "أثناء تعديل السكربت."
             )
         }), 500
+
 
     finally:
         conn.close()
@@ -1578,6 +1532,7 @@ def delete_script(script_id):
             "success": True
         })
 
+
     except sqlite3.Error as error:
 
         conn.rollback()
@@ -1587,6 +1542,7 @@ def delete_script(script_id):
             error
         )
 
+
         return jsonify({
             "success": False,
             "error": (
@@ -1594,6 +1550,7 @@ def delete_script(script_id):
                 "أثناء حذف السكربت."
             )
         }), 500
+
 
     finally:
         conn.close()
@@ -1618,6 +1575,7 @@ if __name__ == "__main__":
             "8080"
         )
     )
+
 
     app.run(
         host="0.0.0.0",
