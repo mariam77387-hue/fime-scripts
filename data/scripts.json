@@ -2,12 +2,12 @@
     {
         "id": "example-script",
         "name": "Example Script",
-        "description": "This is an example script. Replace this content with your own script.",
+        "description": "مثال لسكربت داخل مكتبة Fime Scripts.",
         "category": "Roblox",
         "type": "Script",
         "tags": [
             "Example",
-            "Test"
+            "Roblox"
         ],
         "code": "-- Put your script here\nprint(\"Hello from Fime!\")",
         "featured": true
@@ -16,7 +16,7 @@
     {
         "id": "example-tool",
         "name": "Example Tool",
-        "description": "Another example item for the Fime library.",
+        "description": "مثال لأداة داخل مكتبة Fime.",
         "category": "Tools",
         "type": "Tool",
         "tags": [
