@@ -1,29 +1,399 @@
-[
-    {
-        "id": "example-script",
-        "name": "Example Script",
-        "description": "مثال لسكربت داخل مكتبة Fime Scripts.",
-        "category": "Roblox",
-        "type": "Script",
-        "tags": [
-            "Example",
-            "Roblox"
-        ],
-        "code": "-- Put your script here\nprint(\"Hello from Fime!\")",
-        "featured": true
-    },
+document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
 
-    {
-        "id": "example-tool",
-        "name": "Example Tool",
-        "description": "مثال لأداة داخل مكتبة Fime.",
-        "category": "Tools",
-        "type": "Tool",
-        "tags": [
-            "Tool",
-            "Example"
-        ],
-        "code": "-- Your code here\nprint(\"Fime\")",
-        "featured": false
+        const container =
+            document.getElementById(
+                "scriptDetails"
+            );
+
+        if (!container) {
+            return;
+        }
+
+
+        const params =
+            new URLSearchParams(
+                window.location.search
+            );
+
+
+        const id =
+            params.get("id");
+
+
+        if (!id) {
+            showError(
+                container,
+                "لم يتم تحديد أي سكربت."
+            );
+
+            return;
+        }
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `/api/scripts/${encodeURIComponent(id)}`,
+                    {
+                        method: "GET",
+                        cache: "no-store",
+                        headers: {
+                            "Accept":
+                                "application/json"
+                        }
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                if (response.status === 404) {
+                    throw new Error(
+                        "SCRIPT_NOT_FOUND"
+                    );
+                }
+
+                throw new Error(
+                    `API error: ${response.status}`
+                );
+            }
+
+
+            const script =
+                await response.json();
+
+
+            if (
+                !script ||
+                typeof script !== "object"
+            ) {
+                throw new Error(
+                    "Invalid script data"
+                );
+            }
+
+
+            renderScript(
+                container,
+                script
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "Failed to load script:",
+                error
+            );
+
+
+            if (
+                error.message ===
+                "SCRIPT_NOT_FOUND"
+            ) {
+
+                showError(
+                    container,
+                    "السكربت غير موجود."
+                );
+
+                return;
+            }
+
+
+            showError(
+                container,
+                "تعذر تحميل السكربت."
+            );
+        }
     }
-]
+);
+
+
+/*
+ * =========================
+ * RENDER SCRIPT
+ * =========================
+ */
+
+function renderScript(
+    container,
+    script
+) {
+
+    const tags =
+        (Array.isArray(script.tags)
+            ? script.tags
+            : [])
+            .map(
+                tag => `
+                    <span class="tag">
+                        ${escapeHTML(tag)}
+                    </span>
+                `
+            )
+            .join("");
+
+
+    const title =
+        script.title ||
+        script.name ||
+        "بدون اسم";
+
+
+    const type =
+        String(script.type || "Script")
+            .toLowerCase();
+
+
+    const icon =
+        type === "hack"
+            ? "🧩"
+            : "📜";
+
+
+    container.innerHTML = `
+
+        <div class="script-detail-header">
+
+            <div class="script-card-top">
+
+                <div class="script-icon">
+                    ${icon}
+                </div>
+
+                <span class="script-category">
+                    ${escapeHTML(
+                        script.category || "Other"
+                    )}
+                </span>
+
+            </div>
+
+
+            <h1>
+                ${escapeHTML(title)}
+            </h1>
+
+
+            <p>
+                ${escapeHTML(
+                    script.description || ""
+                )}
+            </p>
+
+
+            ${
+                script.game
+                    ? `
+                        <div class="detail-game">
+                            🎮 ${escapeHTML(script.game)}
+                        </div>
+                    `
+                    : ""
+            }
+
+
+            <div class="detail-meta">
+                ${tags}
+            </div>
+
+        </div>
+
+
+        <div class="code-container">
+
+            <div class="code-header">
+
+                <span>
+                    كود السكربت
+                </span>
+
+                <button
+                    class="copy-code-btn"
+                    id="copyCodeBtn"
+                    type="button">
+
+                    نسخ الكود
+
+                </button>
+
+            </div>
+
+
+            <pre><code id="scriptCode"></code></pre>
+
+        </div>
+
+
+        <div class="script-description">
+
+            <h2>
+                عن هذا السكربت
+            </h2>
+
+            <p>
+                ${escapeHTML(
+                    script.description ||
+                    "لا يوجد وصف."
+                )}
+            </p>
+
+        </div>
+
+
+        <div class="script-actions">
+
+            <a
+                class="card-btn"
+                href="scripts.html">
+
+                ← العودة للسكربتات
+
+            </a>
+
+        </div>
+
+    `;
+
+
+    /*
+     * مهم:
+     * نضع الكود باستخدام textContent
+     * حتى لا يتم تفسيره كـ HTML.
+     */
+
+    const codeElement =
+        document.getElementById(
+            "scriptCode"
+        );
+
+
+    if (codeElement) {
+
+        codeElement.textContent =
+            script.code || "";
+    }
+
+
+    const copyButton =
+        document.getElementById(
+            "copyCodeBtn"
+        );
+
+
+    if (copyButton) {
+
+        copyButton.addEventListener(
+            "click",
+            async () => {
+
+                try {
+
+                    await navigator.clipboard.writeText(
+                        script.code || ""
+                    );
+
+
+                    copyButton.textContent =
+                        "تم النسخ ✓";
+
+
+                    setTimeout(
+                        () => {
+
+                            copyButton.textContent =
+                                "نسخ الكود";
+
+                        },
+                        1500
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        "Copy failed:",
+                        error
+                    );
+
+
+                    copyButton.textContent =
+                        "تعذر النسخ";
+
+
+                    setTimeout(
+                        () => {
+
+                            copyButton.textContent =
+                                "نسخ الكود";
+
+                        },
+                        1500
+                    );
+                }
+            }
+        );
+    }
+}
+
+
+/*
+ * =========================
+ * ERROR
+ * =========================
+ */
+
+function showError(
+    container,
+    message
+) {
+
+    container.innerHTML = `
+
+        <div class="empty-state">
+
+            <div class="empty-icon">
+                !
+            </div>
+
+            <h3>
+                ${escapeHTML(message)}
+            </h3>
+
+            <p>
+                ارجع إلى صفحة السكربتات وحاول مرة أخرى.
+            </p>
+
+            <a
+                class="card-btn primary"
+                href="scripts.html">
+
+                العودة للسكربتات
+
+            </a>
+
+        </div>
+
+    `;
+}
+
+
+/*
+ * =========================
+ * SECURITY
+ * =========================
+ */
+
+function escapeHTML(value) {
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
