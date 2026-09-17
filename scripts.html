@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Scripts — Fime</title>
+    <meta name="description" content="Browse Fime Scripts.">
+
+    <link rel="stylesheet" href="css/style.css">
+
+</head>
+
+<body>
+
+<header class="navbar">
+
+    <div class="container nav-container">
+
+        <a href="index.html" class="logo">
+            <span class="logo-mark">F</span>
+            <span>Fime<span class="accent">.</span></span>
+        </a>
+
+        <nav class="nav-links">
+
+            <a href="index.html">Home</a>
+
+            <a href="scripts.html" class="active">
+                Scripts
+            </a>
+
+            <a href="hacks.html">
+                Hacks
+            </a>
+
+        </nav>
+
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            ☰
+        </button>
+
+    </div>
+
+</header>
+
+
+<div class="mobile-menu" id="mobileMenu">
+
+    <a href="index.html">
+        Home
+    </a>
+
+    <a href="scripts.html">
+        Scripts
+    </a>
+
+    <a href="hacks.html">
+        Hacks
+    </a>
+
+</div>
+
+
+<main>
+
+<section class="page-header">
+
+    <div class="container">
+
+        <span class="small-label">
+            LIBRARY
+        </span>
+
+        <h1>
+            Scripts
+        </h1>
+
+        <p>
+            Browse the scripts available in the Fime library.
+        </p>
+
+    </div>
+
+</section>
+
+
+<section class="library-section">
+
+    <div class="container">
+
+        <!-- SEARCH -->
+
+        <div class="search-wrapper">
+
+            <div class="search-box">
+
+                <span>⌕</span>
+
+                <input
+                    type="text"
+                    id="scriptSearch"
+                    placeholder="Search scripts..."
+                    autocomplete="off"
+                >
+
+            </div>
+
+        </div>
+
+
+        <!-- FILTERS -->
+
+        <div class="filters" id="categoryFilters">
+
+            <button
+                class="filter-btn active"
+                data-category="all">
+                All
+            </button>
+
+        </div>
+
+
+        <!-- RESULTS -->
+
+        <div
+            class="scripts-grid"
+            id="scriptsGrid">
+        </div>
+
+
+        <!-- EMPTY -->
+
+        <div
+            class="empty-state"
+            id="emptyState"
+            style="display:none;">
+
+            <div class="empty-icon">
+                ◌
+            </div>
+
+            <h3>
+                No scripts found
+            </h3>
+
+            <p>
+                Try another search or category.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+</main>
+
+
+<footer>
+
+    <div class="container footer-content">
+
+        <div>
+
+            <div class="logo">
+
+                <span class="logo-mark">
+                    F
+                </span>
+
+                <span>
+                    Fime<span class="accent">.</span>
+                </span>
+
+            </div>
+
+            <p>
+                A clean and organized script library.
+            </p>
+
+        </div>
+
+
+        <div class="footer-links">
+
+            <a href="index.html">
+                Home
+            </a>
+
+            <a href="scripts.html">
+                Scripts
+            </a>
+
+            <a href="hacks.html">
+                Hacks
+            </a>
+
+        </div>
+
+    </div>
+
+
+    <div class="container footer-bottom">
+
+        © 2026 Fime. All rights reserved.
+
+    </div>
+
+</footer>
+
+
+<script src="js/app.js"></script>
+<script src="js/scripts.js"></script>
+
+</body>
+</html>
