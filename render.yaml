@@ -1,0 +1,52 @@
+services:
+  - type: web
+    runtime: static
+    name: fime-scripts
+
+    staticPublishPath: .
+
+    headers:
+
+      # منع تضمين الموقع داخل iframe
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+      # منع MIME sniffing
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+
+      # تقليل معلومات الـ Referer
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+
+      # تعطيل صلاحيات المتصفح غير المطلوبة
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+
+      # إجبار HTTPS
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+
+      # حماية أساسية من تحميل مصادر غير مصرح بها
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+
+      # عدم السماح بالتخزين المؤقت للصفحات
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+
+      # تخزين الملفات الثابتة مؤقتًا
+      - path: /css/*
+        name: Cache-Control
+        value: public, max-age=86400
+
+      - path: /js/*
+        name: Cache-Control
+        value: public, max-age=86400
