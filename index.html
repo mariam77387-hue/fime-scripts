@@ -1,143 +1,351 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Fime Scripts</title>
-    <meta name="description" content="Fime Scripts - A clean and organized scripts library.">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    <link rel="stylesheet" href="css/style.css">
+    <title>Fime Scripts | مكتبة السكربتات</title>
+
+    <meta
+        name="description"
+        content="Fime Scripts - مكتبة مرتبة وسهلة للسكربتات والأدوات والمحتوى الذي ينشره فريق Fime."
+    >
+
+    <meta
+        name="theme-color"
+        content="#07080d"
+    >
+
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
 </head>
+
 
 <body>
 
-    <!-- NAVBAR -->
+
+    <!-- =========================
+         NAVBAR
+    ========================== -->
+
     <header class="navbar">
+
         <div class="container nav-container">
 
-            <a href="index.html" class="logo">
-                <span class="logo-mark">F</span>
-                <span>Fime<span class="accent">.</span></span>
+
+            <!-- LOGO -->
+
+            <a
+                href="index.html"
+                class="logo"
+                aria-label="الصفحة الرئيسية"
+            >
+
+                <span class="logo-mark">
+                    F
+                </span>
+
+                <span>
+                    Fime<span class="accent">.</span>
+                </span>
+
             </a>
 
-            <nav class="nav-links">
-                <a href="index.html" class="active">Home</a>
-                <a href="scripts.html">Scripts</a>
-                <a href="hacks.html">Hacks</a>
+
+            <!-- DESKTOP NAVIGATION -->
+
+            <nav
+                class="nav-links"
+                aria-label="القائمة الرئيسية"
+            >
+
+                <a
+                    href="index.html"
+                    class="active"
+                >
+                    الرئيسية
+                </a>
+
+                <a href="scripts.html">
+                    السكربتات
+                </a>
+
+                <a href="hacks.html">
+                    الهاكات
+                </a>
+
             </nav>
 
-            <button class="mobile-menu-btn" id="mobileMenuBtn">
+
+            <!-- MOBILE MENU BUTTON -->
+
+            <button
+                class="mobile-menu-btn"
+                id="mobileMenuBtn"
+                aria-label="فتح القائمة"
+                aria-expanded="false"
+            >
                 ☰
             </button>
 
+
         </div>
+
     </header>
 
 
-    <!-- MOBILE MENU -->
-    <div class="mobile-menu" id="mobileMenu">
-        <a href="index.html">Home</a>
-        <a href="scripts.html">Scripts</a>
-        <a href="hacks.html">Hacks</a>
+
+    <!-- =========================
+         MOBILE MENU
+    ========================== -->
+
+    <div
+        class="mobile-menu"
+        id="mobileMenu"
+    >
+
+        <a
+            href="index.html"
+            class="active"
+        >
+            الرئيسية
+        </a>
+
+        <a href="scripts.html">
+            السكربتات
+        </a>
+
+        <a href="hacks.html">
+            الهاكات
+        </a>
+
     </div>
 
 
-    <!-- HERO -->
+
+    <!-- =========================
+         MAIN
+    ========================== -->
+
     <main>
+
+
+        <!-- =========================
+             HERO
+        ========================== -->
 
         <section class="hero">
 
             <div class="hero-glow"></div>
 
+
             <div class="container hero-content">
 
+
+                <!-- STATUS -->
+
                 <div class="hero-badge">
+
                     <span class="status-dot"></span>
-                    Fime Scripts is online
+
+                    موقع Fime Scripts يعمل الآن
+
                 </div>
 
+
+                <!-- TITLE -->
+
                 <h1>
-                    Your scripts.
-                    <span>Organized.</span>
+
+                    سكربتاتك.
+
+                    <span>
+                        مرتبة في مكان واحد.
+                    </span>
+
                 </h1>
 
+
+                <!-- DESCRIPTION -->
+
                 <p>
-                    A simple and clean place to discover, view and copy
-                    scripts and tools published by Fime.
+
+                    مكتبة بسيطة ومرتبة لاستكشاف السكربتات
+                    والأدوات والمحتوى الذي ينشره فريق Fime،
+                    مع إمكانية مشاهدة المحتوى ونسخه بسهولة.
+
                 </p>
+
+
+                <!-- BUTTONS -->
 
                 <div class="hero-buttons">
 
-                    <a href="scripts.html" class="btn btn-primary">
-                        Browse Scripts
-                        <span>→</span>
+
+                    <a
+                        href="scripts.html"
+                        class="btn btn-primary"
+                    >
+
+                        تصفح السكربتات
+
+                        <span>
+                            ←
+                        </span>
+
                     </a>
 
-                    <a href="hacks.html" class="btn btn-secondary">
-                        Explore Hacks
+
+                    <a
+                        href="hacks.html"
+                        class="btn btn-secondary"
+                    >
+
+                        استكشف الهاكات
+
                     </a>
+
 
                 </div>
+
 
             </div>
 
         </section>
 
 
-        <!-- FEATURES -->
+
+        <!-- =========================
+             FEATURES
+        ========================== -->
 
         <section class="section">
 
+
             <div class="container">
 
+
                 <div class="section-heading">
-                    <span class="small-label">WHY FIME</span>
-                    <h2>Simple. Fast. Organized.</h2>
+
+                    <span class="small-label">
+                        لماذا Fime؟
+                    </span>
+
+
+                    <h2>
+                        بسيط. سريع. مرتب.
+                    </h2>
+
+
                     <p>
-                        Everything is designed to make finding and copying
-                        your content easier.
+                        صممنا الموقع ليكون الوصول إلى المحتوى
+                        ونسخه أسهل وأسرع.
                     </p>
+
                 </div>
+
 
 
                 <div class="features-grid">
 
-                    <div class="feature-card">
-                        <div class="feature-icon">⌘</div>
-                        <h3>One Click Copy</h3>
-                        <p>
-                            Copy scripts instantly without dealing with
-                            complicated pages.
-                        </p>
-                    </div>
+
+                    <!-- FEATURE 1 -->
 
                     <div class="feature-card">
-                        <div class="feature-icon">⌕</div>
-                        <h3>Easy Search</h3>
+
+                        <div class="feature-icon">
+                            ⌘
+                        </div>
+
+
+                        <h3>
+                            نسخ بضغطة واحدة
+                        </h3>
+
+
                         <p>
-                            Find scripts quickly using the built-in search
-                            system.
+                            انسخ السكربت مباشرة بدون الحاجة
+                            إلى التعامل مع صفحات معقدة.
                         </p>
+
                     </div>
 
-                    <div class="feature-card">
-                        <div class="feature-icon">◈</div>
-                        <h3>Organized</h3>
-                        <p>
-                            Categories and tags keep everything clean and
-                            easy to navigate.
-                        </p>
-                    </div>
+
+
+                    <!-- FEATURE 2 -->
 
                     <div class="feature-card">
-                        <div class="feature-icon">⚡</div>
-                        <h3>Fast</h3>
+
+                        <div class="feature-icon">
+                            ⌕
+                        </div>
+
+
+                        <h3>
+                            بحث سريع
+                        </h3>
+
+
                         <p>
-                            Lightweight pages designed to load quickly on
-                            mobile and desktop.
+                            ابحث عن السكربت الذي تريده
+                            بسهولة باستخدام نظام البحث.
                         </p>
+
                     </div>
+
+
+
+                    <!-- FEATURE 3 -->
+
+                    <div class="feature-card">
+
+                        <div class="feature-icon">
+                            ◈
+                        </div>
+
+
+                        <h3>
+                            تنظيم واضح
+                        </h3>
+
+
+                        <p>
+                            تصنيفات ووسوم تساعدك على الوصول
+                            إلى المحتوى المطلوب بسهولة.
+                        </p>
+
+                    </div>
+
+
+
+                    <!-- FEATURE 4 -->
+
+                    <div class="feature-card">
+
+                        <div class="feature-icon">
+                            ⚡
+                        </div>
+
+
+                        <h3>
+                            سريع وخفيف
+                        </h3>
+
+
+                        <p>
+                            موقع خفيف ومناسب للجوال والكمبيوتر
+                            وسهل الاستخدام.
+                        </p>
+
+                    </div>
+
 
                 </div>
 
@@ -146,42 +354,108 @@
         </section>
 
 
-        <!-- CATEGORIES -->
+
+        <!-- =========================
+             CATEGORIES
+        ========================== -->
 
         <section class="section section-dark">
 
+
             <div class="container">
 
+
                 <div class="section-heading">
-                    <span class="small-label">EXPLORE</span>
-                    <h2>Browse Categories</h2>
+
+                    <span class="small-label">
+                        استكشف
+                    </span>
+
+
+                    <h2>
+                        تصفح الأقسام
+                    </h2>
+
+
+                    <p>
+                        اختر القسم الذي تريد تصفحه.
+                    </p>
+
                 </div>
+
 
 
                 <div class="category-grid">
 
-                    <a href="scripts.html" class="category-card">
-                        <div class="category-icon">📜</div>
 
-                        <div>
-                            <h3>Scripts</h3>
-                            <p>Browse all available scripts.</p>
+                    <!-- SCRIPTS -->
+
+                    <a
+                        href="scripts.html"
+                        class="category-card"
+                    >
+
+                        <div class="category-icon">
+                            📜
                         </div>
 
-                        <span class="category-arrow">→</span>
+
+                        <div>
+
+                            <h3>
+                                السكربتات
+                            </h3>
+
+
+                            <p>
+                                تصفح جميع السكربتات المتوفرة
+                                في مكتبة Fime.
+                            </p>
+
+                        </div>
+
+
+                        <span class="category-arrow">
+                            ←
+                        </span>
+
                     </a>
 
 
-                    <a href="hacks.html" class="category-card">
-                        <div class="category-icon">🧩</div>
 
-                        <div>
-                            <h3>Hacks</h3>
-                            <p>Explore the tools and content you publish.</p>
+                    <!-- HACKS -->
+
+                    <a
+                        href="hacks.html"
+                        class="category-card"
+                    >
+
+                        <div class="category-icon">
+                            🧩
                         </div>
 
-                        <span class="category-arrow">→</span>
+
+                        <div>
+
+                            <h3>
+                                الهاكات
+                            </h3>
+
+
+                            <p>
+                                استكشف الأدوات والمحتوى الذي
+                                يتم نشره وإدارته من فريق Fime.
+                            </p>
+
+                        </div>
+
+
+                        <span class="category-arrow">
+                            ←
+                        </span>
+
                     </a>
+
 
                 </div>
 
@@ -190,73 +464,141 @@
         </section>
 
 
-        <!-- CTA -->
+
+        <!-- =========================
+             CTA
+        ========================== -->
 
         <section class="cta-section">
 
+
             <div class="container">
+
 
                 <div class="cta-box">
 
+
                     <div>
-                        <span class="small-label">FIME</span>
+
+                        <span class="small-label">
+                            FIME
+                        </span>
+
 
                         <h2>
-                            Everything you need,
-                            in one place.
+                            كل ما تحتاجه،
+                            في مكان واحد.
                         </h2>
 
+
                         <p>
-                            Browse the library and find what you're looking for.
+                            تصفح المكتبة وابحث عن المحتوى
+                            الذي تحتاجه بسهولة.
                         </p>
+
                     </div>
 
-                    <a href="scripts.html" class="btn btn-primary">
-                        View Library →
+
+                    <a
+                        href="scripts.html"
+                        class="btn btn-primary"
+                    >
+
+                        عرض المكتبة
+
+                        <span>
+                            ←
+                        </span>
+
                     </a>
+
 
                 </div>
 
             </div>
 
         </section>
+
 
     </main>
 
 
-    <!-- FOOTER -->
+
+    <!-- =========================
+         FOOTER
+    ========================== -->
 
     <footer>
 
+
         <div class="container footer-content">
 
+
             <div>
+
+
                 <div class="logo">
-                    <span class="logo-mark">F</span>
-                    <span>Fime<span class="accent">.</span></span>
+
+                    <span class="logo-mark">
+                        F
+                    </span>
+
+                    <span>
+                        Fime<span class="accent">.</span>
+                    </span>
+
                 </div>
 
+
                 <p>
-                    A clean and organized script library.
+                    مكتبة مرتبة وسهلة للسكربتات والمحتوى.
                 </p>
+
+
             </div>
 
-            <div class="footer-links">
-                <a href="index.html">Home</a>
-                <a href="scripts.html">Scripts</a>
-                <a href="hacks.html">Hacks</a>
+
+
+            <div
+                class="footer-links"
+                aria-label="روابط الموقع"
+            >
+
+                <a href="index.html">
+                    الرئيسية
+                </a>
+
+                <a href="scripts.html">
+                    السكربتات
+                </a>
+
+                <a href="hacks.html">
+                    الهاكات
+                </a>
+
             </div>
+
 
         </div>
+
+
 
         <div class="container footer-bottom">
-            © 2026 Fime. All rights reserved.
+
+            © 2026 Fime — جميع الحقوق محفوظة.
+
         </div>
+
 
     </footer>
 
 
+
+    <!-- JAVASCRIPT -->
+
     <script src="js/app.js"></script>
 
+
 </body>
+
 </html>
