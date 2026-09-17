@@ -129,6 +129,333 @@ def get_db():
     return conn
 
 
+def get_table_columns(conn, table_name):
+    """
+    يرجع أسماء الأعمدة الموجودة في الجدول.
+
+    أسماء الجداول هنا ثابتة من داخل الكود
+    وليست قادمة من المستخدم.
+    """
+
+    rows = conn.execute(
+        f"PRAGMA table_info({table_name})"
+    ).fetchall()
+
+    return {
+        row["name"]
+        for row in rows
+    }
+
+
+def add_column_if_missing(
+    conn,
+    table_name,
+    columns,
+    column_name,
+    definition
+):
+    """
+    يضيف العمود فقط إذا لم يكن موجودًا.
+    """
+
+    if column_name not in columns:
+
+        conn.execute(
+            f"""
+            ALTER TABLE {table_name}
+            ADD COLUMN {column_name} {definition}
+            """
+        )
+
+        columns.add(column_name)
+
+
+def migrate_scripts_table(conn):
+    """
+    Migration لقاعدة البيانات القديمة.
+
+    الهدف:
+    - الحفاظ على السكربتات الموجودة.
+    - إضافة الأعمدة الجديدة إذا كانت ناقصة.
+    - دعم قواعد البيانات التي كانت تستخدم name بدل title.
+    """
+
+    columns = get_table_columns(
+        conn,
+        "scripts"
+    )
+
+    # -----------------------------------------------------
+    # title
+    # -----------------------------------------------------
+
+    if "title" not in columns:
+
+        conn.execute(
+            """
+            ALTER TABLE scripts
+            ADD COLUMN title TEXT DEFAULT ''
+            """
+        )
+
+        columns.add("title")
+
+        # بعض النسخ القديمة كانت تستخدم name
+        if "name" in columns:
+
+            conn.execute(
+                """
+                UPDATE scripts
+                SET title = COALESCE(
+                    NULLIF(TRIM(title), ''),
+                    name,
+                    'بدون عنوان'
+                )
+                WHERE title IS NULL
+                   OR TRIM(title) = ''
+                """
+            )
+
+        else:
+
+            conn.execute(
+                """
+                UPDATE scripts
+                SET title = 'بدون عنوان'
+                WHERE title IS NULL
+                   OR TRIM(title) = ''
+                """
+            )
+
+    else:
+
+        if "name" in columns:
+
+            conn.execute(
+                """
+                UPDATE scripts
+                SET title = COALESCE(
+                    NULLIF(TRIM(title), ''),
+                    name,
+                    'بدون عنوان'
+                )
+                WHERE title IS NULL
+                   OR TRIM(title) = ''
+                """
+            )
+
+        else:
+
+            conn.execute(
+                """
+                UPDATE scripts
+                SET title = 'بدون عنوان'
+                WHERE title IS NULL
+                   OR TRIM(title) = ''
+                """
+            )
+
+
+    # -----------------------------------------------------
+    # description
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "description",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # category
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "category",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # game
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "game",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # code
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "code",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # image
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "image",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # featured
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "featured",
+        "INTEGER NOT NULL DEFAULT 0"
+    )
+
+
+    # -----------------------------------------------------
+    # author
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "author",
+        "TEXT DEFAULT 'Fime'"
+    )
+
+
+    # -----------------------------------------------------
+    # created_at
+    #
+    # لا نستخدم CURRENT_TIMESTAMP في ALTER TABLE
+    # لأن SQLite لا يسمح به كـ default في بعض الحالات.
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "created_at",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # updated_at
+    # -----------------------------------------------------
+
+    add_column_if_missing(
+        conn,
+        "scripts",
+        columns,
+        "updated_at",
+        "TEXT DEFAULT ''"
+    )
+
+
+    # -----------------------------------------------------
+    # تنظيف البيانات القديمة
+    # -----------------------------------------------------
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET description = ''
+        WHERE description IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET category = ''
+        WHERE category IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET game = ''
+        WHERE game IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET code = ''
+        WHERE code IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET image = ''
+        WHERE image IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET featured = 0
+        WHERE featured IS NULL
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET author = 'Fime'
+        WHERE author IS NULL
+           OR TRIM(author) = ''
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET created_at = CURRENT_TIMESTAMP
+        WHERE created_at IS NULL
+           OR TRIM(created_at) = ''
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE scripts
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE updated_at IS NULL
+           OR TRIM(updated_at) = ''
+        """
+    )
+
+
 def init_db():
 
     conn = get_db()
@@ -171,6 +498,15 @@ def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
+        )
+
+
+        # -------------------------------------------------
+        # Migration للـ scripts القديمة
+        # -------------------------------------------------
+
+        migrate_scripts_table(
+            conn
         )
 
 
@@ -249,7 +585,7 @@ def row_to_script(row):
 
     return {
         "id": row["id"],
-        "title": row["title"],
+        "title": row["title"] or "",
         "description": row["description"] or "",
         "category": row["category"] or "",
         "game": row["game"] or "",
@@ -257,8 +593,8 @@ def row_to_script(row):
         "image": row["image"] or "",
         "featured": bool(row["featured"]),
         "author": row["author"] or "Fime",
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
+        "created_at": row["created_at"] or "",
+        "updated_at": row["updated_at"] or "",
     }
 
 
@@ -274,14 +610,20 @@ def clean_text(value, max_length=10000):
 
 def clean_title(value):
 
-    value = clean_text(value, 200)
+    value = clean_text(
+        value,
+        200
+    )
 
     return value
 
 
 def valid_image_url(value):
 
-    value = clean_text(value, 2000)
+    value = clean_text(
+        value,
+        2000
+    )
 
     if not value:
         return ""
@@ -315,12 +657,18 @@ def owner_required(function):
     @wraps(function)
     def wrapper(*args, **kwargs):
 
-        if session.get("owner_authenticated") is not True:
+        if session.get(
+            "owner_authenticated"
+        ) is not True:
+
             return jsonify({
                 "error": "غير مصرح"
             }), 401
 
-        return function(*args, **kwargs)
+        return function(
+            *args,
+            **kwargs
+        )
 
     return wrapper
 
@@ -331,6 +679,7 @@ def owner_required(function):
 
 @app.route("/")
 def home():
+
     return send_from_directory(
         BASE_DIR,
         "index.html"
@@ -339,6 +688,7 @@ def home():
 
 @app.route("/scripts")
 def scripts_page():
+
     return send_from_directory(
         BASE_DIR,
         "scripts.html"
@@ -347,6 +697,7 @@ def scripts_page():
 
 @app.route("/hacks")
 def hacks_page():
+
     return send_from_directory(
         BASE_DIR,
         "hacks.html"
@@ -355,6 +706,7 @@ def hacks_page():
 
 @app.route("/script")
 def script_page():
+
     return send_from_directory(
         BASE_DIR,
         "script.html"
@@ -363,6 +715,7 @@ def script_page():
 
 @app.route("/owner")
 def owner_page():
+
     return send_from_directory(
         BASE_DIR,
         "owner.html"
@@ -432,7 +785,9 @@ def protected_files(filename):
 
         if (
             filename_lower == item
-            or filename_lower.startswith(item + "/")
+            or filename_lower.startswith(
+                item + "/"
+            )
         ):
             abort(404)
 
@@ -465,34 +820,43 @@ def owner_login():
 
     password = str(password)
 
-    # ---------------------------------------------
+
+    # -----------------------------------------------------
     # يسمح بإرسال username فارغ من command-bar
     # ويستخدم OWNER_USERNAME الموجود في Render
-    # ---------------------------------------------
+    # -----------------------------------------------------
 
     if not username:
         username = OWNER_USERNAME
 
+
     if username != OWNER_USERNAME:
+
         return jsonify({
             "success": False,
             "error": "بيانات الدخول غير صحيحة."
         }), 401
+
 
     if not check_password_hash(
         OWNER_PASSWORD_HASH,
         password
     ):
+
         return jsonify({
             "success": False,
             "error": "بيانات الدخول غير صحيحة."
         }), 401
 
+
     session.clear()
 
     session.permanent = True
 
-    session["owner_authenticated"] = True
+    session[
+        "owner_authenticated"
+    ] = True
+
 
     return jsonify({
         "success": True,
@@ -523,8 +887,9 @@ def owner_logout():
 def owner_me():
 
     authenticated = (
-        session.get("owner_authenticated")
-        is True
+        session.get(
+            "owner_authenticated"
+        ) is True
     )
 
     return jsonify({
@@ -557,6 +922,7 @@ def get_categories():
             """
         ).fetchall()
 
+
         categories = [
             {
                 "id": row["id"],
@@ -569,7 +935,10 @@ def get_categories():
             for row in rows
         ]
 
-        return jsonify(categories)
+
+        return jsonify(
+            categories
+        )
 
     finally:
         conn.close()
@@ -587,15 +956,19 @@ def create_category():
         silent=True
     ) or {}
 
+
     name = clean_text(
         data.get("name"),
         100
     )
 
+
     if not name:
+
         return jsonify({
             "error": "اكتب اسم التصنيف."
         }), 400
+
 
     conn = get_db()
 
@@ -610,10 +983,13 @@ def create_category():
             (name,)
         ).fetchone()
 
+
         if existing:
+
             return jsonify({
                 "error": "هذا التصنيف موجود بالفعل."
             }), 409
+
 
         cursor = conn.execute(
             """
@@ -624,9 +1000,12 @@ def create_category():
             (name,)
         )
 
+
         conn.commit()
 
+
         category_id = cursor.lastrowid
+
 
         return jsonify({
             "success": True,
@@ -645,7 +1024,9 @@ def create_category():
 # Delete Category — Owner
 # =========================================================
 
-@app.delete("/api/owner/categories/<int:category_id>")
+@app.delete(
+    "/api/owner/categories/<int:category_id>"
+)
 @owner_required
 def delete_category(category_id):
 
@@ -662,15 +1043,20 @@ def delete_category(category_id):
             (category_id,)
         ).fetchone()
 
+
         if not category:
+
             return jsonify({
                 "error": "التصنيف غير موجود."
             }), 404
 
+
         if category["is_default"]:
+
             return jsonify({
                 "error": "لا يمكن حذف التصنيفات الأساسية."
             }), 400
+
 
         count = conn.execute(
             """
@@ -682,13 +1068,16 @@ def delete_category(category_id):
             (category["name"],)
         ).fetchone()[0]
 
+
         if count > 0:
+
             return jsonify({
                 "error": (
                     "لا يمكن حذف التصنيف لأنه يحتوي "
                     "على سكربتات. انقل السكربتات أولاً."
                 )
             }), 400
+
 
         conn.execute(
             """
@@ -698,7 +1087,9 @@ def delete_category(category_id):
             (category_id,)
         )
 
+
         conn.commit()
+
 
         return jsonify({
             "success": True
@@ -729,6 +1120,7 @@ def get_scripts():
             """
         ).fetchall()
 
+
         return jsonify([
             row_to_script(row)
             for row in rows
@@ -742,7 +1134,9 @@ def get_scripts():
 # Single Script
 # =========================================================
 
-@app.get("/api/scripts/<int:script_id>")
+@app.get(
+    "/api/scripts/<int:script_id>"
+)
 def get_script(script_id):
 
     conn = get_db()
@@ -758,10 +1152,13 @@ def get_script(script_id):
             (script_id,)
         ).fetchone()
 
+
         if not row:
+
             return jsonify({
                 "error": "السكربت غير موجود."
             }), 404
+
 
         return jsonify(
             row_to_script(row)
@@ -783,33 +1180,41 @@ def create_script():
         silent=True
     ) or {}
 
+
     title = clean_title(
         data.get("title")
     )
 
+
     if not title:
+
         return jsonify({
             "error": "اكتب اسم السكربت."
         }), 400
+
 
     description = clean_text(
         data.get("description"),
         10000
     )
 
+
     game = clean_text(
         data.get("game"),
         200
     )
+
 
     code = clean_text(
         data.get("code"),
         500000
     )
 
+
     image = valid_image_url(
         data.get("image")
     )
+
 
     # =====================================================
     # التصنيف اختياري
@@ -823,34 +1228,53 @@ def create_script():
         100
     )
 
+
     featured = bool(
-        data.get("featured", False)
+        data.get(
+            "featured",
+            False
+        )
     )
+
 
     conn = get_db()
 
     try:
 
+        # -------------------------------------------------
         # إذا تم اختيار تصنيف، نتأكد أنه موجود.
-        # أما إذا كان فارغاً فنسمح به.
+        # إذا كان فارغًا، نسمح بالنشر بدون تصنيف.
+        # -------------------------------------------------
+
         if category:
 
             category_exists = conn.execute(
                 """
-                SELECT id
+                SELECT id, name
                 FROM categories
                 WHERE LOWER(name) = LOWER(?)
                 """,
                 (category,)
             ).fetchone()
 
+
             if not category_exists:
+
                 return jsonify({
                     "error": "التصنيف المحدد غير موجود."
                 }), 400
 
+
+            # -------------------------------------------------
             # نحفظ الاسم الرسمي الموجود في DB
+            # -------------------------------------------------
+
             category = category_exists["name"]
+
+
+        # -------------------------------------------------
+        # إنشاء السكربت
+        # -------------------------------------------------
 
         cursor = conn.execute(
             """
@@ -879,9 +1303,16 @@ def create_script():
             )
         )
 
+
         conn.commit()
 
+
         script_id = cursor.lastrowid
+
+
+        # -------------------------------------------------
+        # جلب السكربت بعد إنشائه
+        # -------------------------------------------------
 
         row = conn.execute(
             """
@@ -892,10 +1323,28 @@ def create_script():
             (script_id,)
         ).fetchone()
 
+
         return jsonify({
             "success": True,
             "script": row_to_script(row)
         }), 201
+
+    except sqlite3.Error as error:
+
+        conn.rollback()
+
+        print(
+            "❌ SQLite error while creating script:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "حدث خطأ في قاعدة البيانات "
+                "أثناء نشر السكربت."
+            )
+        }), 500
 
     finally:
         conn.close()
@@ -905,7 +1354,9 @@ def create_script():
 # Update Script — Owner
 # =========================================================
 
-@app.put("/api/owner/scripts/<int:script_id>")
+@app.put(
+    "/api/owner/scripts/<int:script_id>"
+)
 @owner_required
 def update_script(script_id):
 
@@ -913,42 +1364,55 @@ def update_script(script_id):
         silent=True
     ) or {}
 
+
     title = clean_title(
         data.get("title")
     )
 
+
     if not title:
+
         return jsonify({
             "error": "اسم السكربت مطلوب."
         }), 400
+
 
     description = clean_text(
         data.get("description"),
         10000
     )
 
+
     game = clean_text(
         data.get("game"),
         200
     )
+
 
     code = clean_text(
         data.get("code"),
         500000
     )
 
+
     image = valid_image_url(
         data.get("image")
     )
+
 
     category = clean_text(
         data.get("category"),
         100
     )
 
+
     featured = bool(
-        data.get("featured", False)
+        data.get(
+            "featured",
+            False
+        )
     )
+
 
     conn = get_db()
 
@@ -963,13 +1427,18 @@ def update_script(script_id):
             (script_id,)
         ).fetchone()
 
+
         if not existing:
+
             return jsonify({
                 "error": "السكربت غير موجود."
             }), 404
 
 
+        # -------------------------------------------------
         # التصنيف اختياري حتى عند التعديل
+        # -------------------------------------------------
+
         if category:
 
             category_exists = conn.execute(
@@ -981,13 +1450,20 @@ def update_script(script_id):
                 (category,)
             ).fetchone()
 
+
             if not category_exists:
+
                 return jsonify({
                     "error": "التصنيف المحدد غير موجود."
                 }), 400
 
+
             category = category_exists["name"]
 
+
+        # -------------------------------------------------
+        # تحديث السكربت
+        # -------------------------------------------------
 
         conn.execute(
             """
@@ -1015,7 +1491,9 @@ def update_script(script_id):
             )
         )
 
+
         conn.commit()
+
 
         row = conn.execute(
             """
@@ -1026,10 +1504,28 @@ def update_script(script_id):
             (script_id,)
         ).fetchone()
 
+
         return jsonify({
             "success": True,
             "script": row_to_script(row)
         })
+
+    except sqlite3.Error as error:
+
+        conn.rollback()
+
+        print(
+            "❌ SQLite error while updating script:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "حدث خطأ في قاعدة البيانات "
+                "أثناء تعديل السكربت."
+            )
+        }), 500
 
     finally:
         conn.close()
@@ -1039,7 +1535,9 @@ def update_script(script_id):
 # Delete Script — Owner
 # =========================================================
 
-@app.delete("/api/owner/scripts/<int:script_id>")
+@app.delete(
+    "/api/owner/scripts/<int:script_id>"
+)
 @owner_required
 def delete_script(script_id):
 
@@ -1056,10 +1554,13 @@ def delete_script(script_id):
             (script_id,)
         ).fetchone()
 
+
         if not existing:
+
             return jsonify({
                 "error": "السكربت غير موجود."
             }), 404
+
 
         conn.execute(
             """
@@ -1069,11 +1570,30 @@ def delete_script(script_id):
             (script_id,)
         )
 
+
         conn.commit()
+
 
         return jsonify({
             "success": True
         })
+
+    except sqlite3.Error as error:
+
+        conn.rollback()
+
+        print(
+            "❌ SQLite error while deleting script:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "حدث خطأ في قاعدة البيانات "
+                "أثناء حذف السكربت."
+            )
+        }), 500
 
     finally:
         conn.close()
