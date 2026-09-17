@@ -1,1250 +1,1132 @@
-let categories = [];
-let scripts = [];
-
-let editingScriptId = null;
-let editingCategoryId = null;
+(() => {
+    "use strict";
 
 
-/*
- * =========================================================
- * ELEMENTS
- * =========================================================
- */
-
-const loginBox =
-    document.getElementById("loginBox");
-
-const dashboard =
-    document.getElementById("dashboard");
-
-const loginForm =
-    document.getElementById("loginForm");
-
-const loginMessage =
-    document.getElementById("loginMessage");
-
-const logoutButton =
-    document.getElementById("logoutButton");
-
-const categoryForm =
-    document.getElementById("categoryForm");
-
-const categoryName =
-    document.getElementById("categoryName");
-
-const categorySubmitButton =
-    document.getElementById(
-        "categorySubmitButton"
-    );
-
-const categoryCancelButton =
-    document.getElementById(
-        "categoryCancelButton"
-    );
-
-const categoryMessage =
-    document.getElementById(
-        "categoryMessage"
-    );
-
-const categoriesList =
-    document.getElementById(
-        "categoriesList"
-    );
-
-const categorySelect =
-    document.getElementById(
-        "category"
-    );
-
-const categoryCount =
-    document.getElementById(
-        "categoryCount"
-    );
-
-const scriptForm =
-    document.getElementById(
-        "scriptForm"
-    );
-
-const scriptFormTitle =
-    document.getElementById(
-        "scriptFormTitle"
-    );
-
-const scriptSubmitButton =
-    document.getElementById(
-        "scriptSubmitButton"
-    );
-
-const scriptCancelButton =
-    document.getElementById(
-        "scriptCancelButton"
-    );
-
-const scriptMessage =
-    document.getElementById(
-        "scriptMessage"
-    );
-
-const scriptsList =
-    document.getElementById(
-        "scriptsList"
-    );
-
-const scriptCount =
-    document.getElementById(
-        "scriptCount"
-    );
+    /* =========================================================
+       Fime Owner Dashboard
+       ========================================================= */
 
 
-/*
- * =========================================================
- * INIT
- * =========================================================
- */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-        checkOwner();
-    }
-);
+    const state = {
+        categories: [],
+        scripts: [],
+        editingScriptId: null
+    };
 
 
-/*
- * =========================================================
- * OWNER SESSION
- * =========================================================
- */
+    const elements = {
+        loginBox: document.getElementById("loginBox"),
+        dashboard: document.getElementById("dashboard"),
 
-async function checkOwner() {
+        loginForm: document.getElementById("loginForm"),
+        ownerUsername: document.getElementById("ownerUsername"),
+        ownerPassword: document.getElementById("ownerPassword"),
+        loginMessage: document.getElementById("loginMessage"),
 
-    try {
+        logoutButton: document.getElementById("logoutButton"),
 
-        const response =
-            await fetch(
-                "/api/owner/me",
-                {
-                    credentials: "same-origin",
-                    cache: "no-store"
+        categoryForm: document.getElementById("categoryForm"),
+        categoryName: document.getElementById("categoryName"),
+        categoryMessage: document.getElementById("categoryMessage"),
+        categoryList: document.getElementById("categoryList"),
+
+        scriptForm: document.getElementById("scriptForm"),
+        scriptTitle: document.getElementById("scriptTitle"),
+        scriptDescription: document.getElementById("scriptDescription"),
+        scriptGame: document.getElementById("scriptGame"),
+        scriptCode: document.getElementById("scriptCode"),
+        scriptImage: document.getElementById("scriptImage"),
+        scriptFeatured: document.getElementById("scriptFeatured"),
+        category: document.getElementById("category"),
+
+        scriptMessage: document.getElementById("scriptMessage"),
+
+        scriptsList: document.getElementById("scriptsList"),
+
+        editingScriptId: document.getElementById("editingScriptId"),
+        editBadge: document.getElementById("editBadge"),
+        publishButton: document.getElementById("publishButton"),
+        cancelEditButton: document.getElementById("cancelEditButton")
+    };
+
+
+    /* =========================================================
+       API
+       ========================================================= */
+
+    async function apiFetch(
+        url,
+        options = {}
+    ) {
+
+        const response = await fetch(
+            url,
+            {
+                ...options,
+
+                credentials: "same-origin",
+
+                cache: "no-store",
+
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    ...(options.headers || {})
                 }
-            );
+            }
+        );
+
+
+        let data = null;
+
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
 
 
         if (!response.ok) {
-            showLogin();
-            return;
+
+            const error =
+                data?.error ||
+                data?.message ||
+                `HTTP ${response.status}`;
+
+            const exception =
+                new Error(error);
+
+            exception.status =
+                response.status;
+
+            throw exception;
         }
 
 
-        const data =
-            await response.json();
-
-
-        if (data.authenticated) {
-
-            await showDashboard();
-
-        } else {
-
-            showLogin();
-
-        }
-
-    } catch (error) {
-
-        console.error(
-            "Owner check failed:",
-            error
-        );
-
-        showLogin();
+        return data;
     }
-}
 
 
-/*
- * =========================================================
- * SHOW / HIDE
- * =========================================================
- */
+    /* =========================================================
+       Messages
+       ========================================================= */
 
-async function showDashboard() {
+    function showMessage(
+        element,
+        message,
+        type = ""
+    ) {
 
-    loginBox.hidden = true;
-    dashboard.hidden = false;
+        if (!element) return;
 
-    await Promise.all([
-        loadCategories(),
-        loadOwnerScripts()
-    ]);
-}
+        element.textContent =
+            message || "";
 
-
-function showLogin() {
-
-    loginBox.hidden = false;
-    dashboard.hidden = true;
-}
+        element.className =
+            `message ${type}`.trim();
+    }
 
 
-/*
- * =========================================================
- * LOGIN
- * =========================================================
- */
+    function clearMessage(element) {
 
-loginForm.addEventListener(
-    "submit",
-    async event => {
+        if (!element) return;
+
+        element.textContent = "";
+        element.className = "message";
+    }
+
+
+    /* =========================================================
+       Authentication
+       ========================================================= */
+
+    async function checkSession() {
+
+        try {
+
+            const data =
+                await apiFetch(
+                    "/api/owner/me"
+                );
+
+
+            if (data.authenticated) {
+
+                showDashboard();
+
+                await loadDashboard();
+
+            } else {
+
+                showLogin();
+
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Session check failed:",
+                error
+            );
+
+            showLogin();
+        }
+    }
+
+
+    function showLogin() {
+
+        if (elements.loginBox) {
+            elements.loginBox.style.display =
+                "block";
+        }
+
+        if (elements.dashboard) {
+            elements.dashboard.style.display =
+                "none";
+        }
+    }
+
+
+    function showDashboard() {
+
+        if (elements.loginBox) {
+            elements.loginBox.style.display =
+                "none";
+        }
+
+        if (elements.dashboard) {
+            elements.dashboard.style.display =
+                "block";
+        }
+    }
+
+
+    /* =========================================================
+       Login
+       ========================================================= */
+
+    async function login(event) {
 
         event.preventDefault();
 
-        setMessage(
-            loginMessage,
-            "جارٍ تسجيل الدخول...",
-            ""
+        clearMessage(
+            elements.loginMessage
         );
 
 
         const username =
-            document
-                .getElementById(
-                    "username"
-                )
-                .value
-                .trim();
+            elements.ownerUsername
+                ?.value
+                ?.trim() || "";
 
 
         const password =
-            document
-                .getElementById(
-                    "password"
-                )
-                .value;
+            elements.ownerPassword
+                ?.value || "";
 
 
-        try {
+        if (!username) {
 
-            const response =
-                await fetch(
-                    "/api/owner/login",
-                    {
-                        method: "POST",
-
-                        credentials:
-                            "same-origin",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json",
-
-                            "Accept":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify({
-                                username,
-                                password
-                            })
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                setMessage(
-                    loginMessage,
-                    data.error ||
-                        "فشل تسجيل الدخول.",
-                    "error"
-                );
-
-                return;
-            }
-
-
-            loginForm.reset();
-
-            setMessage(
-                loginMessage,
-                "",
-                ""
-            );
-
-
-            await showDashboard();
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            setMessage(
-                loginMessage,
-                "حدث خطأ في الاتصال.",
+            showMessage(
+                elements.loginMessage,
+                "اكتب اسم المستخدم.",
                 "error"
             );
-        }
-    }
-);
 
-
-/*
- * =========================================================
- * LOGOUT
- * =========================================================
- */
-
-logoutButton.addEventListener(
-    "click",
-    async () => {
-
-        try {
-
-            await fetch(
-                "/api/owner/logout",
-                {
-                    method: "POST",
-                    credentials:
-                        "same-origin"
-                }
-            );
-
-        } catch (error) {
-
-            console.error(error);
-
-        } finally {
-
-            editingScriptId = null;
-            editingCategoryId = null;
-
-            showLogin();
-
-        }
-    }
-);
-
-
-/*
- * =========================================================
- * CATEGORIES
- * =========================================================
- */
-
-async function loadCategories() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/categories",
-                {
-                    credentials:
-                        "same-origin",
-                    cache: "no-store"
-                }
-            );
-
-
-        if (!response.ok) {
-            throw new Error(
-                "Failed to load categories"
-            );
-        }
-
-
-        categories =
-            await response.json();
-
-
-        renderCategories();
-        renderCategorySelect();
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        categoriesList.textContent =
-            "تعذر تحميل الأقسام.";
-
-    }
-}
-
-
-/*
- * =========================================================
- * RENDER CATEGORIES
- * =========================================================
- */
-
-function renderCategories() {
-
-    categoryCount.textContent =
-        categories.length;
-
-
-    categoriesList.textContent = "";
-
-
-    if (!categories.length) {
-
-        categoriesList.innerHTML = `
-            <div class="owner-empty">
-                لا توجد أقسام حتى الآن.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    categories.forEach(category => {
-
-        const item =
-            document.createElement(
-                "div"
-            );
-
-        item.className =
-            "owner-category";
-
-
-        if (
-            editingCategoryId ===
-            category.id
-        ) {
-
-            item.classList.add(
-                "owner-editing"
-            );
-        }
-
-
-        const info =
-            document.createElement(
-                "div"
-            );
-
-        info.className =
-            "owner-item-info";
-
-
-        const title =
-            document.createElement(
-                "strong"
-            );
-
-        title.textContent =
-            category.name;
-
-
-        info.appendChild(title);
-
-
-        const actions =
-            document.createElement(
-                "div"
-            );
-
-        actions.className =
-            "owner-item-actions";
-
-
-        const editButton =
-            document.createElement(
-                "button"
-            );
-
-        editButton.type = "button";
-        editButton.className =
-            "btn btn-secondary";
-
-        editButton.textContent =
-            "تعديل";
-
-
-        editButton.addEventListener(
-            "click",
-            () => {
-                startCategoryEdit(
-                    category
-                );
-            }
-        );
-
-
-        const deleteButton =
-            document.createElement(
-                "button"
-            );
-
-        deleteButton.type = "button";
-        deleteButton.className =
-            "btn btn-secondary owner-danger";
-
-        deleteButton.textContent =
-            "حذف";
-
-
-        deleteButton.addEventListener(
-            "click",
-            () => {
-                deleteCategory(
-                    category.id,
-                    category.name
-                );
-            }
-        );
-
-
-        actions.appendChild(
-            editButton
-        );
-
-        actions.appendChild(
-            deleteButton
-        );
-
-
-        item.appendChild(info);
-        item.appendChild(actions);
-
-
-        categoriesList.appendChild(item);
-
-    });
-}
-
-
-/*
- * =========================================================
- * CATEGORY SELECT
- * =========================================================
- */
-
-function renderCategorySelect() {
-
-    const currentValue =
-        categorySelect.value;
-
-
-    categorySelect.innerHTML = "";
-
-
-    const defaultOption =
-        document.createElement(
-            "option"
-        );
-
-    defaultOption.value = "";
-    defaultOption.textContent =
-        "اختر قسمًا";
-
-
-    categorySelect.appendChild(
-        defaultOption
-    );
-
-
-    categories.forEach(category => {
-
-        const option =
-            document.createElement(
-                "option"
-            );
-
-        option.value =
-            category.name;
-
-        option.textContent =
-            category.name;
-
-
-        categorySelect.appendChild(
-            option
-        );
-    });
-
-
-    if (
-        categories.some(
-            category =>
-                category.name ===
-                currentValue
-        )
-    ) {
-
-        categorySelect.value =
-            currentValue;
-
-    }
-}
-
-
-/*
- * =========================================================
- * CREATE / UPDATE CATEGORY
- * =========================================================
- */
-
-categoryForm.addEventListener(
-    "submit",
-    async event => {
-
-        event.preventDefault();
-
-
-        const name =
-            categoryName.value.trim();
-
-
-        if (!name) {
             return;
         }
 
 
-        categorySubmitButton.disabled =
-            true;
+        if (!password) {
+
+            showMessage(
+                elements.loginMessage,
+                "اكتب كلمة المرور.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        const button =
+            elements.loginForm
+                ?.querySelector(
+                    'button[type="submit"]'
+                );
+
+
+        const originalText =
+            button?.textContent ||
+            "تسجيل الدخول";
+
+
+        if (button) {
+            button.disabled = true;
+            button.textContent =
+                "جاري تسجيل الدخول...";
+        }
 
 
         try {
 
-            let response;
+            await apiFetch(
+                "/api/owner/login",
+                {
+                    method: "POST",
+
+                    body: JSON.stringify({
+                        username,
+                        password
+                    })
+                }
+            );
 
 
-            if (editingCategoryId) {
-
-                response =
-                    await fetch(
-                        `/api/owner/categories/${editingCategoryId}`,
-                        {
-                            method: "PUT",
-
-                            credentials:
-                                "same-origin",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    name
-                                })
-                        }
-                    );
-
-            } else {
-
-                response =
-                    await fetch(
-                        "/api/owner/categories",
-                        {
-                            method: "POST",
-
-                            credentials:
-                                "same-origin",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify({
-                                    name
-                                })
-                        }
-                    );
-            }
+            elements.ownerPassword.value =
+                "";
 
 
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                setMessage(
-                    categoryMessage,
-                    data.error ||
-                        "فشلت العملية.",
-                    "error"
-                );
-
-                return;
-            }
-
-
-            setMessage(
-                categoryMessage,
-                editingCategoryId
-                    ? "✅ تم تعديل القسم."
-                    : "✅ تم إنشاء القسم.",
+            showMessage(
+                elements.loginMessage,
+                "تم تسجيل الدخول بنجاح.",
                 "success"
             );
 
 
-            resetCategoryForm();
+            showDashboard();
+
+
+            await loadDashboard();
+
+
+        } catch (error) {
+
+            console.error(
+                "Login failed:",
+                error
+            );
+
+
+            showMessage(
+                elements.loginMessage,
+                error.message ||
+                "بيانات الدخول غير صحيحة.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+
+                button.disabled = false;
+
+                button.textContent =
+                    originalText;
+            }
+        }
+    }
+
+
+    /* =========================================================
+       Logout
+       ========================================================= */
+
+    async function logout() {
+
+        try {
+
+            await apiFetch(
+                "/api/owner/logout",
+                {
+                    method: "POST"
+                }
+            );
+
+        } catch (error) {
+
+            console.error(
+                "Logout error:",
+                error
+            );
+
+        } finally {
+
+            state.categories = [];
+            state.scripts = [];
+            state.editingScriptId = null;
+
+            resetScriptForm();
+
+            showLogin();
+
+            showMessage(
+                elements.loginMessage,
+                "تم تسجيل الخروج.",
+                "success"
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Load Dashboard
+       ========================================================= */
+
+    async function loadDashboard() {
+
+        try {
+
+            await Promise.all([
+                loadCategories(),
+                loadScripts()
+            ]);
+
+        } catch (error) {
+
+            console.error(
+                "Dashboard load error:",
+                error
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Categories
+       ========================================================= */
+
+    async function loadCategories() {
+
+        const data =
+            await apiFetch(
+                "/api/categories"
+            );
+
+
+        state.categories =
+            Array.isArray(data)
+                ? data
+                : [];
+
+
+        renderCategorySelect();
+
+        renderCategoryList();
+    }
+
+
+    function renderCategorySelect() {
+
+        if (!elements.category) {
+            return;
+        }
+
+
+        const currentValue =
+            elements.category.value;
+
+
+        elements.category.innerHTML = "";
+
+
+        /*
+         * هذا الخيار موجود دائماً.
+         *
+         * وبالتالي التصنيف ليس مطلوباً.
+         */
+
+        const emptyOption =
+            document.createElement("option");
+
+        emptyOption.value = "";
+
+        emptyOption.textContent =
+            "بدون تصنيف";
+
+        elements.category.appendChild(
+            emptyOption
+        );
+
+
+        for (
+            const category
+            of state.categories
+        ) {
+
+            if (!category?.name) {
+                continue;
+            }
+
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                category.name;
+
+            option.textContent =
+                category.name;
+
+            elements.category.appendChild(
+                option
+            );
+        }
+
+
+        /*
+         * نحاول الاحتفاظ بالاختيار السابق
+         */
+
+        const exists =
+            Array.from(
+                elements.category.options
+            ).some(
+                option =>
+                    option.value === currentValue
+            );
+
+
+        elements.category.value =
+            exists
+                ? currentValue
+                : "";
+    }
+
+
+    function renderCategoryList() {
+
+        if (!elements.categoryList) {
+            return;
+        }
+
+
+        elements.categoryList.innerHTML =
+            "";
+
+
+        if (
+            state.categories.length === 0
+        ) {
+
+            const empty =
+                document.createElement("div");
+
+            empty.textContent =
+                "لا توجد تصنيفات حالياً.";
+
+            empty.style.opacity =
+                ".6";
+
+            elements.categoryList.appendChild(
+                empty
+            );
+
+            return;
+        }
+
+
+        for (
+            const category
+            of state.categories
+        ) {
+
+            const item =
+                document.createElement("div");
+
+            item.className =
+                "category-item";
+
+
+            const nameWrapper =
+                document.createElement("div");
+
+            nameWrapper.className =
+                "category-name";
+
+
+            const name =
+                document.createElement("span");
+
+            name.textContent =
+                category.name;
+
+
+            nameWrapper.appendChild(
+                name
+            );
+
+
+            if (category.is_default) {
+
+                const badge =
+                    document.createElement("span");
+
+                badge.className =
+                    "category-default";
+
+                badge.textContent =
+                    "أساسي";
+
+                nameWrapper.appendChild(
+                    badge
+                );
+            }
+
+
+            item.appendChild(
+                nameWrapper
+            );
+
+
+            /*
+             * التصنيفات الأساسية لا نحذفها.
+             */
+
+            if (!category.is_default) {
+
+                const deleteButton =
+                    document.createElement("button");
+
+                deleteButton.type =
+                    "button";
+
+                deleteButton.className =
+                    "owner-button owner-danger";
+
+                deleteButton.textContent =
+                    "حذف";
+
+
+                deleteButton.addEventListener(
+                    "click",
+                    () => {
+                        deleteCategory(
+                            category.id,
+                            category.name
+                        );
+                    }
+                );
+
+
+                item.appendChild(
+                    deleteButton
+                );
+            }
+
+
+            elements.categoryList.appendChild(
+                item
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Create Category
+       ========================================================= */
+
+    async function createCategory(event) {
+
+        event.preventDefault();
+
+        clearMessage(
+            elements.categoryMessage
+        );
+
+
+        const name =
+            elements.categoryName
+                ?.value
+                ?.trim() || "";
+
+
+        if (!name) {
+
+            showMessage(
+                elements.categoryMessage,
+                "اكتب اسم التصنيف.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        try {
+
+            await apiFetch(
+                "/api/owner/categories",
+                {
+                    method: "POST",
+
+                    body: JSON.stringify({
+                        name
+                    })
+                }
+            );
+
+
+            elements.categoryName.value =
+                "";
+
+
+            showMessage(
+                elements.categoryMessage,
+                "تم إنشاء التصنيف بنجاح.",
+                "success"
+            );
+
 
             await loadCategories();
 
 
         } catch (error) {
 
-            console.error(error);
-
-            setMessage(
-                categoryMessage,
-                "حدث خطأ في الاتصال.",
-                "error"
+            console.error(
+                "Create category error:",
+                error
             );
 
-        } finally {
 
-            categorySubmitButton.disabled =
-                false;
-
+            showMessage(
+                elements.categoryMessage,
+                error.message ||
+                "تعذر إنشاء التصنيف.",
+                "error"
+            );
         }
     }
-);
 
 
-/*
- * =========================================================
- * START CATEGORY EDIT
- * =========================================================
- */
+    /* =========================================================
+       Delete Category
+       ========================================================= */
 
-function startCategoryEdit(category) {
+    async function deleteCategory(
+        categoryId,
+        categoryName
+    ) {
 
-    editingCategoryId =
-        category.id;
-
-
-    categoryName.value =
-        category.name;
-
-
-    categorySubmitButton.textContent =
-        "حفظ التعديل";
-
-
-    categoryCancelButton.hidden =
-        false;
-
-
-    renderCategories();
-
-
-    categoryName.focus();
-
-    window.scrollTo({
-        top:
-            categoryForm
-                .getBoundingClientRect()
-                .top +
-            window.scrollY -
-            100,
-
-        behavior: "smooth"
-    });
-}
-
-
-/*
- * =========================================================
- * CANCEL CATEGORY EDIT
- * =========================================================
- */
-
-categoryCancelButton.addEventListener(
-    "click",
-    () => {
-        resetCategoryForm();
-    }
-);
-
-
-function resetCategoryForm() {
-
-    editingCategoryId =
-        null;
-
-    categoryForm.reset();
-
-    categorySubmitButton.textContent =
-        "إضافة القسم";
-
-    categoryCancelButton.hidden =
-        true;
-
-    renderCategories();
-}
-
-
-/*
- * =========================================================
- * DELETE CATEGORY
- * =========================================================
- */
-
-async function deleteCategory(
-    id,
-    name
-) {
-
-    const confirmed =
-        window.confirm(
-            `هل أنت متأكد من حذف قسم "${name}"؟`
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/owner/categories/${id}`,
-                {
-                    method: "DELETE",
-                    credentials:
-                        "same-origin"
-                }
+        const confirmed =
+            window.confirm(
+                `هل أنت متأكد من حذف التصنيف "${categoryName}"؟`
             );
 
 
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            setMessage(
-                categoryMessage,
-                data.error ||
-                    "تعذر حذف القسم.",
-                "error"
-            );
-
+        if (!confirmed) {
             return;
         }
-
-
-        setMessage(
-            categoryMessage,
-            "✅ تم حذف القسم.",
-            "success"
-        );
-
-
-        await loadCategories();
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        setMessage(
-            categoryMessage,
-            "حدث خطأ أثناء حذف القسم.",
-            "error"
-        );
-    }
-}
-
-
-/*
- * =========================================================
- * LOAD SCRIPTS
- * =========================================================
- */
-
-async function loadOwnerScripts() {
-
-    scriptsList.innerHTML = `
-        <div class="owner-empty">
-            جاري تحميل السكربتات...
-        </div>
-    `;
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/scripts",
-                {
-                    credentials:
-                        "same-origin",
-                    cache: "no-store"
-                }
-            );
-
-
-        if (!response.ok) {
-
-            if (
-                response.status === 401
-            ) {
-
-                showLogin();
-
-                return;
-            }
-
-            throw new Error(
-                "Failed to load scripts"
-            );
-        }
-
-
-        scripts =
-            await response.json();
-
-
-        renderScripts();
-
-
-    } catch (error) {
-
-        console.error(error);
-
-        scriptsList.innerHTML = `
-            <div class="owner-empty">
-                تعذر تحميل السكربتات.
-            </div>
-        `;
-    }
-}
-
-
-/*
- * =========================================================
- * RENDER SCRIPTS
- * =========================================================
- */
-
-function renderScripts() {
-
-    scriptCount.textContent =
-        scripts.length;
-
-
-    scriptsList.textContent = "";
-
-
-    if (!scripts.length) {
-
-        scriptsList.innerHTML = `
-            <div class="owner-empty">
-                لا توجد سكربتات حتى الآن.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    scripts.forEach(script => {
-
-        const item =
-            document.createElement(
-                "div"
-            );
-
-        item.className =
-            "owner-script";
-
-
-        const info =
-            document.createElement(
-                "div"
-            );
-
-        info.className =
-            "owner-item-info";
-
-
-        const title =
-            document.createElement(
-                "strong"
-            );
-
-        title.textContent =
-            script.title ||
-            script.name ||
-            "بدون اسم";
-
-
-        const meta =
-            document.createElement(
-                "span"
-            );
-
-        const game =
-            script.game ||
-            "بدون لعبة";
-
-
-        meta.textContent =
-            `${script.category || "بدون قسم"} • ${game}`;
-
-
-        info.appendChild(title);
-        info.appendChild(meta);
-
-
-        const actions =
-            document.createElement(
-                "div"
-            );
-
-        actions.className =
-            "owner-item-actions";
-
-
-        const editButton =
-            document.createElement(
-                "button"
-            );
-
-        editButton.type = "button";
-        editButton.className =
-            "btn btn-secondary";
-
-        editButton.textContent =
-            "تعديل";
-
-
-        editButton.addEventListener(
-            "click",
-            () => {
-                startScriptEdit(
-                    script
-                );
-            }
-        );
-
-
-        const deleteButton =
-            document.createElement(
-                "button"
-            );
-
-        deleteButton.type = "button";
-        deleteButton.className =
-            "btn btn-secondary owner-danger";
-
-        deleteButton.textContent =
-            "حذف";
-
-
-        deleteButton.addEventListener(
-            "click",
-            () => {
-                deleteScript(
-                    script.id,
-                    script.title
-                );
-            }
-        );
-
-
-        actions.appendChild(
-            editButton
-        );
-
-        actions.appendChild(
-            deleteButton
-        );
-
-
-        item.appendChild(info);
-        item.appendChild(actions);
-
-
-        scriptsList.appendChild(item);
-
-    });
-}
-
-
-/*
- * =========================================================
- * CREATE / UPDATE SCRIPT
- * =========================================================
- */
-
-scriptForm.addEventListener(
-    "submit",
-    async event => {
-
-        event.preventDefault();
-
-
-        const payload = {
-
-            title:
-                document
-                    .getElementById("title")
-                    .value
-                    .trim(),
-
-            description:
-                document
-                    .getElementById("description")
-                    .value
-                    .trim(),
-
-            game:
-                document
-                    .getElementById("game")
-                    .value
-                    .trim(),
-
-            type:
-                document
-                    .getElementById("type")
-                    .value
-                    .trim() ||
-                "Script",
-
-            category:
-                categorySelect.value,
-
-            tags:
-                document
-                    .getElementById("tags")
-                    .value
-                    .split(",")
-                    .map(tag =>
-                        tag.trim()
-                    )
-                    .filter(Boolean),
-
-            image:
-                document
-                    .getElementById("image")
-                    .value
-                    .trim(),
-
-            code:
-                document
-                    .getElementById("code")
-                    .value,
-
-            featured:
-                document
-                    .getElementById("featured")
-                    .checked
-        };
-
-
-        if (!payload.category) {
-
-            setMessage(
-                scriptMessage,
-                "اختر قسمًا أولًا.",
-                "error"
-            );
-
-            return;
-        }
-
-
-        scriptSubmitButton.disabled =
-            true;
 
 
         try {
 
-            let response;
-
-
-            if (editingScriptId) {
-
-                response =
-                    await fetch(
-                        `/api/owner/scripts/${editingScriptId}`,
-                        {
-                            method: "PUT",
-
-                            credentials:
-                                "same-origin",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify(
-                                    payload
-                                )
-                        }
-                    );
-
-            } else {
-
-                response =
-                    await fetch(
-                        "/api/owner/scripts",
-                        {
-                            method: "POST",
-
-                            credentials:
-                                "same-origin",
-
-                            headers: {
-                                "Content-Type":
-                                    "application/json"
-                            },
-
-                            body:
-                                JSON.stringify(
-                                    payload
-                                )
-                        }
-                    );
-            }
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                if (
-                    response.status ===
-                    401
-                ) {
-
-                    showLogin();
-
-                    return;
+            await apiFetch(
+                `/api/owner/categories/${encodeURIComponent(categoryId)}`,
+                {
+                    method: "DELETE"
                 }
+            );
 
 
-                setMessage(
-                    scriptMessage,
-                    data.error ||
-                        "فشلت العملية.",
+            showMessage(
+                elements.categoryMessage,
+                "تم حذف التصنيف.",
+                "success"
+            );
+
+
+            await loadCategories();
+
+
+        } catch (error) {
+
+            console.error(
+                "Delete category error:",
+                error
+            );
+
+
+            showMessage(
+                elements.categoryMessage,
+                error.message ||
+                "تعذر حذف التصنيف.",
+                "error"
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Scripts
+       ========================================================= */
+
+    async function loadScripts() {
+
+        const data =
+            await apiFetch(
+                "/api/scripts"
+            );
+
+
+        state.scripts =
+            Array.isArray(data)
+                ? data
+                : [];
+
+
+        renderScriptsList();
+    }
+
+
+    function renderScriptsList() {
+
+        if (!elements.scriptsList) {
+            return;
+        }
+
+
+        elements.scriptsList.innerHTML =
+            "";
+
+
+        if (
+            state.scripts.length === 0
+        ) {
+
+            const empty =
+                document.createElement("div");
+
+            empty.textContent =
+                "لا توجد سكربتات منشورة حالياً.";
+
+            empty.style.opacity =
+                ".6";
+
+            elements.scriptsList.appendChild(
+                empty
+            );
+
+            return;
+        }
+
+
+        for (
+            const script
+            of state.scripts
+        ) {
+
+            const item =
+                document.createElement("div");
+
+            item.className =
+                "owner-script";
+
+
+            /* ---------------------------------------------
+               Info
+               --------------------------------------------- */
+
+            const info =
+                document.createElement("div");
+
+            info.className =
+                "owner-script-info";
+
+
+            const title =
+                document.createElement("div");
+
+            title.className =
+                "owner-script-title";
+
+            title.textContent =
+                script.title ||
+                "بدون عنوان";
+
+
+            const meta =
+                document.createElement("div");
+
+            meta.className =
+                "owner-script-meta";
+
+
+            const category =
+                script.category ||
+                "بدون تصنيف";
+
+
+            const game =
+                script.game ||
+                "بدون لعبة";
+
+
+            meta.textContent =
+                `${category} • ${game}`;
+
+
+            info.appendChild(
+                title
+            );
+
+            info.appendChild(
+                meta
+            );
+
+
+            /* ---------------------------------------------
+               Actions
+               --------------------------------------------- */
+
+            const actions =
+                document.createElement("div");
+
+            actions.className =
+                "owner-script-actions";
+
+
+            const editButton =
+                document.createElement("button");
+
+            editButton.type =
+                "button";
+
+            editButton.className =
+                "owner-button owner-secondary";
+
+            editButton.textContent =
+                "تعديل";
+
+
+            editButton.addEventListener(
+                "click",
+                () => {
+                    startEditScript(script);
+                }
+            );
+
+
+            const deleteButton =
+                document.createElement("button");
+
+            deleteButton.type =
+                "button";
+
+            deleteButton.className =
+                "owner-button owner-danger";
+
+            deleteButton.textContent =
+                "حذف";
+
+
+            deleteButton.addEventListener(
+                "click",
+                () => {
+                    deleteScript(
+                        script.id,
+                        script.title
+                    );
+                }
+            );
+
+
+            actions.appendChild(
+                editButton
+            );
+
+            actions.appendChild(
+                deleteButton
+            );
+
+
+            item.appendChild(
+                info
+            );
+
+            item.appendChild(
+                actions
+            );
+
+
+            elements.scriptsList.appendChild(
+                item
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Create Script
+       ========================================================= */
+
+    async function submitScript(event) {
+
+        event.preventDefault();
+
+        clearMessage(
+            elements.scriptMessage
+        );
+
+
+        const title =
+            elements.scriptTitle
+                ?.value
+                ?.trim() || "";
+
+
+        if (!title) {
+
+            showMessage(
+                elements.scriptMessage,
+                "اكتب اسم السكربت.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        /*
+         * التصنيف:
+         *
+         * إذا كان المستخدم اختار "بدون تصنيف"
+         * تكون القيمة "".
+         *
+         * وهذا مقبول تماماً.
+         */
+
+        const category =
+            elements.category
+                ?.value
+                ?.trim() || "";
+
+
+        const payload = {
+
+            title,
+
+            description:
+                elements.scriptDescription
+                    ?.value
+                    ?.trim() || "",
+
+            game:
+                elements.scriptGame
+                    ?.value
+                    ?.trim() || "",
+
+            category,
+
+            image:
+                elements.scriptImage
+                    ?.value
+                    ?.trim() || "",
+
+            code:
+                elements.scriptCode
+                    ?.value || "",
+
+            featured:
+                Boolean(
+                    elements.scriptFeatured
+                        ?.checked
+                )
+        };
+
+
+        const editingId =
+            state.editingScriptId;
+
+
+        const isEditing =
+            Boolean(editingId);
+
+
+        const url =
+            isEditing
+                ? `/api/owner/scripts/${encodeURIComponent(editingId)}`
+                : "/api/owner/scripts";
+
+
+        const method =
+            isEditing
+                ? "PUT"
+                : "POST";
+
+
+        const originalText =
+            elements.publishButton
+                ?.textContent ||
+            "نشر السكربت";
+
+
+        if (elements.publishButton) {
+
+            elements.publishButton.disabled =
+                true;
+
+            elements.publishButton.textContent =
+                isEditing
+                    ? "جاري الحفظ..."
+                    : "جاري النشر...";
+        }
+
+
+        try {
+
+            const result =
+                await apiFetch(
+                    url,
+                    {
+                        method,
+
+                        body: JSON.stringify(
+                            payload
+                        )
+                    }
+                );
+
+
+            showMessage(
+                elements.scriptMessage,
+
+                isEditing
+                    ? "تم تعديل السكربت بنجاح."
+                    : "تم نشر السكربت بنجاح.",
+
+                "success"
+            );
+
+
+            resetScriptForm();
+
+
+            await loadScripts();
+
+
+        } catch (error) {
+
+            console.error(
+                "Save script error:",
+                error
+            );
+
+
+            /*
+             * لو انتهت الجلسة
+             */
+
+            if (
+                error.status === 401
+            ) {
+
+                showLogin();
+
+                showMessage(
+                    elements.loginMessage,
+                    "انتهت جلسة الدخول. سجّل الدخول مرة أخرى.",
                     "error"
                 );
 
@@ -1252,303 +1134,343 @@ scriptForm.addEventListener(
             }
 
 
-            setMessage(
-                scriptMessage,
-                editingScriptId
-                    ? "✅ تم تعديل السكربت."
-                    : "✅ تم نشر السكربت.",
-                "success"
-            );
-
-
-            resetScriptForm();
-
-            await loadOwnerScripts();
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            setMessage(
-                scriptMessage,
-                "حدث خطأ في الاتصال.",
+            showMessage(
+                elements.scriptMessage,
+                error.message ||
+                "تعذر حفظ السكربت.",
                 "error"
             );
+
 
         } finally {
 
-            scriptSubmitButton.disabled =
-                false;
+            if (elements.publishButton) {
 
+                elements.publishButton.disabled =
+                    false;
+
+                elements.publishButton.textContent =
+                    originalText;
+            }
         }
     }
-);
 
 
-/*
- * =========================================================
- * START SCRIPT EDIT
- * =========================================================
- */
+    /* =========================================================
+       Edit Script
+       ========================================================= */
 
-function startScriptEdit(script) {
+    function startEditScript(script) {
 
-    editingScriptId =
-        script.id;
+        state.editingScriptId =
+            script.id;
 
 
-    document.getElementById(
-        "title"
-    ).value =
-        script.title ||
-        script.name ||
-        "";
+        elements.editingScriptId.value =
+            script.id;
 
 
-    document.getElementById(
-        "description"
-    ).value =
-        script.description ||
-        "";
+        elements.scriptTitle.value =
+            script.title || "";
 
 
-    document.getElementById(
-        "game"
-    ).value =
-        script.game ||
-        "";
+        elements.scriptDescription.value =
+            script.description || "";
 
 
-    document.getElementById(
-        "type"
-    ).value =
-        script.type ||
-        "Script";
+        elements.scriptGame.value =
+            script.game || "";
 
 
-    document.getElementById(
-        "tags"
-    ).value =
-        Array.isArray(script.tags)
-            ? script.tags.join(", ")
-            : "";
+        elements.scriptImage.value =
+            script.image || "";
 
 
-    document.getElementById(
-        "image"
-    ).value =
-        script.image ||
-        "";
+        elements.scriptCode.value =
+            script.code || "";
 
 
-    document.getElementById(
-        "code"
-    ).value =
-        script.code ||
-        "";
+        elements.scriptFeatured.checked =
+            Boolean(script.featured);
 
 
-    document.getElementById(
-        "featured"
-    ).checked =
-        Boolean(
-            script.featured
-        );
+        /*
+         * التصنيف اختياري.
+         */
+
+        renderCategorySelect();
 
 
-    categorySelect.value =
-        script.category ||
-        "";
+        const category =
+            script.category || "";
 
 
-    scriptFormTitle.textContent =
-        "✏️ تعديل السكربت";
-
-
-    scriptSubmitButton.textContent =
-        "حفظ التعديلات";
-
-
-    scriptCancelButton.hidden =
-        false;
-
-
-    renderScripts();
-
-
-    scriptForm.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-    });
-}
-
-
-/*
- * =========================================================
- * CANCEL SCRIPT EDIT
- * =========================================================
- */
-
-scriptCancelButton.addEventListener(
-    "click",
-    () => {
-        resetScriptForm();
-    }
-);
-
-
-function resetScriptForm() {
-
-    editingScriptId =
-        null;
-
-
-    scriptForm.reset();
-
-
-    document.getElementById(
-        "type"
-    ).value =
-        "Script";
-
-
-    scriptFormTitle.textContent =
-        "➕ إضافة سكربت";
-
-
-    scriptSubmitButton.textContent =
-        "نشر السكربت";
-
-
-    scriptCancelButton.hidden =
-        true;
-
-
-    renderScripts();
-}
-
-
-/*
- * =========================================================
- * DELETE SCRIPT
- * =========================================================
- */
-
-async function deleteScript(
-    id,
-    title
-) {
-
-    const confirmed =
-        window.confirm(
-            `هل أنت متأكد من حذف "${title || "هذا السكربت"}"؟`
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/owner/scripts/${id}`,
-                {
-                    method: "DELETE",
-
-                    credentials:
-                        "same-origin"
-                }
+        const matchingOption =
+            Array.from(
+                elements.category.options
+            ).find(
+                option =>
+                    option.value.toLowerCase() ===
+                    category.toLowerCase()
             );
 
 
-        const data =
-            await response.json();
+        if (matchingOption) {
+
+            elements.category.value =
+                matchingOption.value;
+
+        } else {
+
+            elements.category.value =
+                "";
+        }
 
 
-        if (!response.ok) {
+        if (elements.editBadge) {
 
-            if (
-                response.status ===
-                401
-            ) {
-
-                showLogin();
-
-                return;
-            }
+            elements.editBadge.style.display =
+                "block";
+        }
 
 
-            setMessage(
-                scriptMessage,
-                data.error ||
-                    "فشل حذف السكربت.",
-                "error"
+        if (elements.publishButton) {
+
+            elements.publishButton.textContent =
+                "حفظ التعديلات";
+        }
+
+
+        if (elements.cancelEditButton) {
+
+            elements.cancelEditButton.style.display =
+                "inline-block";
+        }
+
+
+        clearMessage(
+            elements.scriptMessage
+        );
+
+
+        elements.scriptForm.scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
+    }
+
+
+    /* =========================================================
+       Reset Script Form
+       ========================================================= */
+
+    function resetScriptForm() {
+
+        state.editingScriptId =
+            null;
+
+
+        if (elements.editingScriptId) {
+            elements.editingScriptId.value =
+                "";
+        }
+
+
+        if (elements.scriptForm) {
+            elements.scriptForm.reset();
+        }
+
+
+        /*
+         * بعد reset نضمن أن التصنيف يرجع
+         * إلى "بدون تصنيف".
+         */
+
+        renderCategorySelect();
+
+
+        if (elements.category) {
+            elements.category.value =
+                "";
+        }
+
+
+        if (elements.editBadge) {
+
+            elements.editBadge.style.display =
+                "none";
+        }
+
+
+        if (elements.publishButton) {
+
+            elements.publishButton.textContent =
+                "نشر السكربت";
+        }
+
+
+        if (elements.cancelEditButton) {
+
+            elements.cancelEditButton.style.display =
+                "none";
+        }
+    }
+
+
+    /* =========================================================
+       Delete Script
+       ========================================================= */
+
+    async function deleteScript(
+        scriptId,
+        scriptTitle
+    ) {
+
+        const confirmed =
+            window.confirm(
+                `هل أنت متأكد من حذف السكربت "${scriptTitle}"؟`
             );
 
+
+        if (!confirmed) {
             return;
         }
 
 
-        setMessage(
-            scriptMessage,
-            "✅ تم حذف السكربت.",
-            "success"
-        );
+        try {
+
+            await apiFetch(
+                `/api/owner/scripts/${encodeURIComponent(scriptId)}`,
+                {
+                    method: "DELETE"
+                }
+            );
 
 
-        if (
-            String(editingScriptId) ===
-            String(id)
-        ) {
+            /*
+             * إذا كان السكربت المحذوف هو
+             * الذي نعدله حالياً، نلغي التعديل.
+             */
 
-            resetScriptForm();
+            if (
+                state.editingScriptId ===
+                scriptId
+            ) {
+                resetScriptForm();
+            }
 
+
+            showMessage(
+                elements.scriptMessage,
+                "تم حذف السكربت.",
+                "success"
+            );
+
+
+            await loadScripts();
+
+
+        } catch (error) {
+
+            console.error(
+                "Delete script error:",
+                error
+            );
+
+
+            showMessage(
+                elements.scriptMessage,
+                error.message ||
+                "تعذر حذف السكربت.",
+                "error"
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Events
+       ========================================================= */
+
+    function setupEvents() {
+
+        if (elements.loginForm) {
+
+            elements.loginForm.addEventListener(
+                "submit",
+                login
+            );
         }
 
 
-        await loadOwnerScripts();
+        if (elements.logoutButton) {
+
+            elements.logoutButton.addEventListener(
+                "click",
+                logout
+            );
+        }
 
 
-    } catch (error) {
+        if (elements.categoryForm) {
 
-        console.error(error);
+            elements.categoryForm.addEventListener(
+                "submit",
+                createCategory
+            );
+        }
 
-        setMessage(
-            scriptMessage,
-            "حدث خطأ أثناء حذف السكربت.",
-            "error"
+
+        if (elements.scriptForm) {
+
+            elements.scriptForm.addEventListener(
+                "submit",
+                submitScript
+            );
+        }
+
+
+        if (elements.cancelEditButton) {
+
+            elements.cancelEditButton.addEventListener(
+                "click",
+                () => {
+                    resetScriptForm();
+
+                    clearMessage(
+                        elements.scriptMessage
+                    );
+                }
+            );
+        }
+    }
+
+
+    /* =========================================================
+       Start
+       ========================================================= */
+
+    async function init() {
+
+        setupEvents();
+
+        await checkSession();
+    }
+
+
+    if (
+        document.readyState ===
+        "loading"
+    ) {
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            init
         );
+
+    } else {
+
+        init();
     }
-}
 
-
-/*
- * =========================================================
- * MESSAGE
- * =========================================================
- */
-
-function setMessage(
-    element,
-    message,
-    type
-) {
-
-    element.textContent =
-        message;
-
-
-    element.classList.remove(
-        "error",
-        "success"
-    );
-
-
-    if (type) {
-        element.classList.add(type);
-    }
-}
+})();
