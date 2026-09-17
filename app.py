@@ -3,6 +3,7 @@ import re
 import sqlite3
 from functools import wraps
 from pathlib import Path
+from contextlib import contextmanager
 
 from flask import (
     Flask,
@@ -12,17 +13,32 @@ from flask import (
     send_from_directory,
     abort,
 )
+
 from werkzeug.security import (
     generate_password_hash,
     check_password_hash,
 )
 
+# PostgreSQL
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
+    dict_row = None
+
 
 # =========================================================
 # Fime Scripts — app.py
+# PostgreSQL + SQLite Fallback
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
+
+# PostgreSQL on Render
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# SQLite fallback for local development
 DB_PATH = BASE_DIR / "fime.db"
 
 app = Flask(__name__, static_folder=None)
@@ -85,20 +101,16 @@ def security_headers(response):
 
     response.headers["X-Frame-Options"] = "DENY"
 
-    response.headers[
-        "Referrer-Policy"
-    ] = "strict-origin-when-cross-origin"
+    response.headers["Referrer-Policy"] = (
+        "strict-origin-when-cross-origin"
+    )
 
-    response.headers[
-        "Permissions-Policy"
-    ] = (
+    response.headers["Permissions-Policy"] = (
         "camera=(), microphone=(), geolocation=(), "
         "payment=(), usb=()"
     )
 
-    response.headers[
-        "Content-Security-Policy"
-    ] = (
+    response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -115,10 +127,68 @@ def security_headers(response):
 
 
 # =========================================================
-# Database
+# Database Type
 # =========================================================
 
+def using_postgres():
+    """
+    إذا كان DATABASE_URL موجودًا نستخدم PostgreSQL.
+    على Render يجب أن يكون DATABASE_URL مربوطًا بقاعدة PostgreSQL.
+    """
+
+    return bool(DATABASE_URL)
+
+
+# =========================================================
+# Database Connection
+# =========================================================
+
+@contextmanager
 def get_db():
+
+    # =====================================================
+    # PostgreSQL
+    # =====================================================
+
+    if using_postgres():
+
+        if psycopg is None:
+            raise RuntimeError(
+                "❌ مكتبة psycopg غير مثبتة. "
+                "تأكد من requirements.txt."
+            )
+
+        conn = None
+
+        try:
+
+            conn = psycopg.connect(
+                DATABASE_URL,
+                row_factory=dict_row,
+                connect_timeout=15,
+            )
+
+            yield conn
+
+            conn.commit()
+
+        except Exception:
+
+            if conn:
+                conn.rollback()
+
+            raise
+
+        finally:
+
+            if conn:
+                conn.close()
+
+        return
+
+    # =====================================================
+    # SQLite fallback
+    # =====================================================
 
     conn = sqlite3.connect(
         DB_PATH,
@@ -127,8 +197,50 @@ def get_db():
 
     conn.row_factory = sqlite3.Row
 
-    return conn
+    try:
 
+        yield conn
+
+        conn.commit()
+
+    except Exception:
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()
+
+
+# =========================================================
+# Database Cursor Helper
+# =========================================================
+
+def fetchall(conn, query, params=()):
+
+    cursor = conn.execute(
+        query,
+        params
+    )
+
+    return cursor.fetchall()
+
+
+def fetchone(conn, query, params=()):
+
+    cursor = conn.execute(
+        query,
+        params
+    )
+
+    return cursor.fetchone()
+
+
+# =========================================================
+# SQLite Migration Helpers
+# =========================================================
 
 def get_table_columns(conn, table_name):
 
@@ -162,13 +274,12 @@ def add_column_if_missing(
         columns.add(column_name)
 
 
-def migrate_scripts_table(conn):
+def migrate_scripts_table_sqlite(conn):
 
     columns = get_table_columns(
         conn,
         "scripts"
     )
-
 
     # -----------------------------------------------------
     # title
@@ -184,7 +295,6 @@ def migrate_scripts_table(conn):
         )
 
         columns.add("title")
-
 
     if "name" in columns:
 
@@ -212,9 +322,8 @@ def migrate_scripts_table(conn):
             """
         )
 
-
     # -----------------------------------------------------
-    # description
+    # Other columns
     # -----------------------------------------------------
 
     add_column_if_missing(
@@ -225,11 +334,6 @@ def migrate_scripts_table(conn):
         "TEXT DEFAULT ''"
     )
 
-
-    # -----------------------------------------------------
-    # category
-    # -----------------------------------------------------
-
     add_column_if_missing(
         conn,
         "scripts",
@@ -237,11 +341,6 @@ def migrate_scripts_table(conn):
         "category",
         "TEXT DEFAULT ''"
     )
-
-
-    # -----------------------------------------------------
-    # game
-    # -----------------------------------------------------
 
     add_column_if_missing(
         conn,
@@ -251,11 +350,6 @@ def migrate_scripts_table(conn):
         "TEXT DEFAULT ''"
     )
 
-
-    # -----------------------------------------------------
-    # code
-    # -----------------------------------------------------
-
     add_column_if_missing(
         conn,
         "scripts",
@@ -263,11 +357,6 @@ def migrate_scripts_table(conn):
         "code",
         "TEXT DEFAULT ''"
     )
-
-
-    # -----------------------------------------------------
-    # image
-    # -----------------------------------------------------
 
     add_column_if_missing(
         conn,
@@ -277,11 +366,6 @@ def migrate_scripts_table(conn):
         "TEXT DEFAULT ''"
     )
 
-
-    # -----------------------------------------------------
-    # featured
-    # -----------------------------------------------------
-
     add_column_if_missing(
         conn,
         "scripts",
@@ -289,11 +373,6 @@ def migrate_scripts_table(conn):
         "featured",
         "INTEGER NOT NULL DEFAULT 0"
     )
-
-
-    # -----------------------------------------------------
-    # author
-    # -----------------------------------------------------
 
     add_column_if_missing(
         conn,
@@ -303,11 +382,6 @@ def migrate_scripts_table(conn):
         "TEXT DEFAULT 'Fime'"
     )
 
-
-    # -----------------------------------------------------
-    # created_at
-    # -----------------------------------------------------
-
     add_column_if_missing(
         conn,
         "scripts",
@@ -315,11 +389,6 @@ def migrate_scripts_table(conn):
         "created_at",
         "TEXT DEFAULT ''"
     )
-
-
-    # -----------------------------------------------------
-    # updated_at
-    # -----------------------------------------------------
 
     add_column_if_missing(
         conn,
@@ -329,9 +398,8 @@ def migrate_scripts_table(conn):
         "TEXT DEFAULT ''"
     )
 
-
     # -----------------------------------------------------
-    # تنظيف البيانات القديمة
+    # Clean old data
     # -----------------------------------------------------
 
     conn.execute(
@@ -410,9 +478,132 @@ def migrate_scripts_table(conn):
     )
 
 
-def init_db():
+# =========================================================
+# PostgreSQL Database Initialization
+# =========================================================
 
-    conn = get_db()
+def init_postgres():
+
+    with get_db() as conn:
+
+        # =================================================
+        # Categories
+        # =================================================
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS categories (
+                id BIGSERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            categories_name_lower_unique
+            ON categories (LOWER(name))
+            """
+        )
+
+        # =================================================
+        # Scripts
+        # =================================================
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scripts (
+                id BIGSERIAL PRIMARY KEY,
+                title VARCHAR(200) NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                category VARCHAR(100) NOT NULL DEFAULT '',
+                game VARCHAR(200) NOT NULL DEFAULT '',
+                code TEXT NOT NULL DEFAULT '',
+                image VARCHAR(2000) NOT NULL DEFAULT '',
+                featured BOOLEAN NOT NULL DEFAULT FALSE,
+                author VARCHAR(200) NOT NULL DEFAULT 'Fime',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+
+        # =================================================
+        # Indexes
+        # =================================================
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            scripts_featured_idx
+            ON scripts (featured)
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            scripts_game_idx
+            ON scripts (LOWER(game))
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            scripts_category_idx
+            ON scripts (LOWER(category))
+            """
+        )
+
+        # =================================================
+        # Default Categories
+        # =================================================
+
+        conn.execute(
+            """
+            INSERT INTO categories
+            (name, is_default)
+            SELECT %s, TRUE
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM categories
+                WHERE LOWER(name) = LOWER(%s)
+            )
+            """,
+            ("Scripts", "Scripts")
+        )
+
+        conn.execute(
+            """
+            INSERT INTO categories
+            (name, is_default)
+            SELECT %s, TRUE
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM categories
+                WHERE LOWER(name) = LOWER(%s)
+            )
+            """,
+            ("Hacks", "Hacks")
+        )
+
+
+# =========================================================
+# SQLite Database Initialization
+# =========================================================
+
+def init_sqlite():
+
+    conn = sqlite3.connect(
+        DB_PATH,
+        timeout=10
+    )
+
+    conn.row_factory = sqlite3.Row
 
     try:
 
@@ -426,11 +617,11 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
                 is_default INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP
+                    DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
-
 
         # =================================================
         # Scripts
@@ -448,19 +639,19 @@ def init_db():
                 image TEXT DEFAULT '',
                 featured INTEGER NOT NULL DEFAULT 0,
                 author TEXT DEFAULT 'Fime',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP
+                    DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+                    DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
-
 
         # =================================================
         # Migration
         # =================================================
 
-        migrate_scripts_table(conn)
-
+        migrate_scripts_table_sqlite(conn)
 
         # =================================================
         # Default Categories
@@ -484,7 +675,6 @@ def init_db():
             ("Hacks", 1)
         )
 
-
         # =================================================
         # Import Old Categories
         # =================================================
@@ -497,7 +687,6 @@ def init_db():
               AND TRIM(category) != ''
             """
         ).fetchall()
-
 
         for row in old_categories:
 
@@ -517,11 +706,46 @@ def init_db():
                 (category_name,)
             )
 
-
         conn.commit()
 
     finally:
+
         conn.close()
+
+
+# =========================================================
+# Initialize Database
+# =========================================================
+
+def init_db():
+
+    if using_postgres():
+
+        print(
+            "🟢 Fime Scripts Database: PostgreSQL"
+        )
+
+        init_postgres()
+
+    else:
+
+        print(
+            "🟡 Fime Scripts Database: SQLite fallback"
+        )
+
+        init_sqlite()
+
+
+# =========================================================
+# Database Error Helper
+# =========================================================
+
+def database_error_name():
+
+    if using_postgres():
+        return "PostgreSQL"
+
+    return "SQLite"
 
 
 # =========================================================
@@ -543,8 +767,12 @@ def row_to_script(row):
         "image": row["image"] or "",
         "featured": bool(row["featured"]),
         "author": row["author"] or "Fime",
-        "created_at": row["created_at"] or "",
-        "updated_at": row["updated_at"] or "",
+        "created_at": str(
+            row["created_at"] or ""
+        ),
+        "updated_at": str(
+            row["updated_at"] or ""
+        ),
     }
 
 
@@ -633,10 +861,6 @@ def home():
         "index.html"
     )
 
-
-# =========================================================
-# Support / Direct index.html
-# =========================================================
 
 @app.route("/index.html")
 def index_html():
@@ -742,7 +966,6 @@ def protected_files(filename):
         "__pycache__",
     )
 
-
     for item in blocked:
 
         if (
@@ -754,10 +977,8 @@ def protected_files(filename):
 
             abort(404)
 
-
     if ".." in filename:
         abort(404)
-
 
     abort(404)
 
@@ -773,12 +994,10 @@ def owner_login():
         silent=True
     ) or {}
 
-
     username = clean_text(
         data.get("username"),
         200
     )
-
 
     password = data.get("password")
 
@@ -787,10 +1006,8 @@ def owner_login():
 
     password = str(password)
 
-
     if not username:
         username = OWNER_USERNAME
-
 
     if username != OWNER_USERNAME:
 
@@ -798,7 +1015,6 @@ def owner_login():
             "success": False,
             "error": "بيانات الدخول غير صحيحة."
         }), 401
-
 
     if not check_password_hash(
         OWNER_PASSWORD_HASH,
@@ -810,7 +1026,6 @@ def owner_login():
             "error": "بيانات الدخول غير صحيحة."
         }), 401
 
-
     session.clear()
 
     session.permanent = True
@@ -818,7 +1033,6 @@ def owner_login():
     session[
         "owner_authenticated"
     ] = True
-
 
     return jsonify({
         "success": True,
@@ -854,7 +1068,6 @@ def owner_me():
         ) is True
     )
 
-
     return jsonify({
         "authenticated": authenticated
     })
@@ -867,24 +1080,41 @@ def owner_me():
 @app.get("/api/categories")
 def get_categories():
 
-    conn = get_db()
+    with get_db() as conn:
 
-    try:
+        if using_postgres():
 
-        rows = conn.execute(
-            """
-            SELECT
-                id,
-                name,
-                is_default,
-                created_at
-            FROM categories
-            ORDER BY
-                is_default DESC,
-                name COLLATE NOCASE ASC
-            """
-        ).fetchall()
+            rows = fetchall(
+                conn,
+                """
+                SELECT
+                    id,
+                    name,
+                    is_default,
+                    created_at
+                FROM categories
+                ORDER BY
+                    is_default DESC,
+                    LOWER(name) ASC
+                """
+            )
 
+        else:
+
+            rows = fetchall(
+                conn,
+                """
+                SELECT
+                    id,
+                    name,
+                    is_default,
+                    created_at
+                FROM categories
+                ORDER BY
+                    is_default DESC,
+                    name COLLATE NOCASE ASC
+                """
+            )
 
         categories = [
             {
@@ -893,18 +1123,14 @@ def get_categories():
                 "is_default": bool(
                     row["is_default"]
                 ),
-                "created_at": row["created_at"],
+                "created_at": str(
+                    row["created_at"]
+                ),
             }
             for row in rows
         ]
 
-
-        return jsonify(
-            categories
-        )
-
-    finally:
-        conn.close()
+        return jsonify(categories)
 
 
 # =========================================================
@@ -919,12 +1145,10 @@ def create_category():
         silent=True
     ) or {}
 
-
     name = clean_text(
         data.get("name"),
         100
     )
-
 
     if not name:
 
@@ -932,55 +1156,89 @@ def create_category():
             "error": "اكتب اسم التصنيف."
         }), 400
 
-
-    conn = get_db()
-
     try:
 
-        existing = conn.execute(
-            """
-            SELECT id
-            FROM categories
-            WHERE LOWER(name) = LOWER(?)
-            """,
-            (name,)
-        ).fetchone()
+        with get_db() as conn:
 
+            if using_postgres():
 
-        if existing:
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM categories
+                    WHERE LOWER(name) = LOWER(%s)
+                    """,
+                    (name,)
+                )
+
+            else:
+
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM categories
+                    WHERE LOWER(name) = LOWER(?)
+                    """,
+                    (name,)
+                )
+
+            if existing:
+
+                return jsonify({
+                    "error": "هذا التصنيف موجود بالفعل."
+                }), 409
+
+            if using_postgres():
+
+                row = fetchone(
+                    conn,
+                    """
+                    INSERT INTO categories
+                    (name, is_default)
+                    VALUES (%s, FALSE)
+                    RETURNING id
+                    """,
+                    (name,)
+                )
+
+                category_id = row["id"]
+
+            else:
+
+                cursor = conn.execute(
+                    """
+                    INSERT INTO categories
+                    (name, is_default)
+                    VALUES (?, 0)
+                    """,
+                    (name,)
+                )
+
+                category_id = cursor.lastrowid
 
             return jsonify({
-                "error": "هذا التصنيف موجود بالفعل."
-            }), 409
+                "success": True,
+                "category": {
+                    "id": category_id,
+                    "name": name,
+                    "is_default": False,
+                }
+            }), 201
 
+    except Exception as error:
 
-        cursor = conn.execute(
-            """
-            INSERT INTO categories
-            (name, is_default)
-            VALUES (?, 0)
-            """,
-            (name,)
+        print(
+            f"❌ {database_error_name()} "
+            f"error while creating category:",
+            error
         )
 
-
-        conn.commit()
-
-
-        category_id = cursor.lastrowid
-
-
         return jsonify({
-            "success": True,
-            "category": {
-                "id": category_id,
-                "name": name,
-                "is_default": False,
-            }
-        }), 201
-
-    finally:
-        conn.close()
+            "success": False,
+            "error": "حدث خطأ في قاعدة البيانات."
+        }), 500
 
 
 # =========================================================
@@ -993,73 +1251,124 @@ def create_category():
 @owner_required
 def delete_category(category_id):
 
-    conn = get_db()
-
     try:
 
-        category = conn.execute(
-            """
-            SELECT *
-            FROM categories
-            WHERE id = ?
-            """,
-            (category_id,)
-        ).fetchone()
+        with get_db() as conn:
 
+            if using_postgres():
 
-        if not category:
-
-            return jsonify({
-                "error": "التصنيف غير موجود."
-            }), 404
-
-
-        if category["is_default"]:
-
-            return jsonify({
-                "error": "لا يمكن حذف التصنيفات الأساسية."
-            }), 400
-
-
-        count = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM scripts
-            WHERE LOWER(TRIM(category))
-                = LOWER(TRIM(?))
-            """,
-            (category["name"],)
-        ).fetchone()[0]
-
-
-        if count > 0:
-
-            return jsonify({
-                "error": (
-                    "لا يمكن حذف التصنيف لأنه يحتوي "
-                    "على سكربتات. انقل السكربتات أولاً."
+                category = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM categories
+                    WHERE id = %s
+                    """,
+                    (category_id,)
                 )
-            }), 400
 
+            else:
 
-        conn.execute(
-            """
-            DELETE FROM categories
-            WHERE id = ?
-            """,
-            (category_id,)
+                category = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM categories
+                    WHERE id = ?
+                    """,
+                    (category_id,)
+                )
+
+            if not category:
+
+                return jsonify({
+                    "error": "التصنيف غير موجود."
+                }), 404
+
+            if category["is_default"]:
+
+                return jsonify({
+                    "error": (
+                        "لا يمكن حذف "
+                        "التصنيفات الأساسية."
+                    )
+                }), 400
+
+            if using_postgres():
+
+                result = fetchone(
+                    conn,
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM scripts
+                    WHERE LOWER(TRIM(category))
+                        = LOWER(TRIM(%s))
+                    """,
+                    (category["name"],)
+                )
+
+            else:
+
+                result = fetchone(
+                    conn,
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM scripts
+                    WHERE LOWER(TRIM(category))
+                        = LOWER(TRIM(?))
+                    """,
+                    (category["name"],)
+                )
+
+            count = int(
+                result["count"]
+            )
+
+            if count > 0:
+
+                return jsonify({
+                    "error": (
+                        "لا يمكن حذف التصنيف لأنه يحتوي "
+                        "على سكربتات. انقل السكربتات أولاً."
+                    )
+                }), 400
+
+            if using_postgres():
+
+                conn.execute(
+                    """
+                    DELETE FROM categories
+                    WHERE id = %s
+                    """,
+                    (category_id,)
+                )
+
+            else:
+
+                conn.execute(
+                    """
+                    DELETE FROM categories
+                    WHERE id = ?
+                    """,
+                    (category_id,)
+                )
+
+            return jsonify({
+                "success": True
+            })
+
+    except Exception as error:
+
+        print(
+            f"❌ {database_error_name()} "
+            f"error while deleting category:",
+            error
         )
 
-
-        conn.commit()
-
-
         return jsonify({
-            "success": True
-        })
-
-    finally:
-        conn.close()
+            "success": False,
+            "error": "حدث خطأ في قاعدة البيانات."
+        }), 500
 
 
 # =========================================================
@@ -1069,28 +1378,37 @@ def delete_category(category_id):
 @app.get("/api/scripts")
 def get_scripts():
 
-    conn = get_db()
-
     try:
 
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM scripts
-            ORDER BY
-                featured DESC,
-                id DESC
-            """
-        ).fetchall()
+        with get_db() as conn:
 
+            rows = fetchall(
+                conn,
+                """
+                SELECT *
+                FROM scripts
+                ORDER BY
+                    featured DESC,
+                    id DESC
+                """
+            )
 
-        return jsonify([
-            row_to_script(row)
-            for row in rows
-        ])
+            return jsonify([
+                row_to_script(row)
+                for row in rows
+            ])
 
-    finally:
-        conn.close()
+    except Exception as error:
+
+        print(
+            f"❌ {database_error_name()} "
+            f"error while loading scripts:",
+            error
+        )
+
+        return jsonify({
+            "error": "تعذر تحميل السكربتات."
+        }), 500
 
 
 # =========================================================
@@ -1102,33 +1420,55 @@ def get_scripts():
 )
 def get_script(script_id):
 
-    conn = get_db()
-
     try:
 
-        row = conn.execute(
-            """
-            SELECT *
-            FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        ).fetchone()
+        with get_db() as conn:
 
+            if using_postgres():
 
-        if not row:
+                row = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM scripts
+                    WHERE id = %s
+                    """,
+                    (script_id,)
+                )
 
-            return jsonify({
-                "error": "السكربت غير موجود."
-            }), 404
+            else:
 
+                row = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
 
-        return jsonify(
-            row_to_script(row)
+            if not row:
+
+                return jsonify({
+                    "error": "السكربت غير موجود."
+                }), 404
+
+            return jsonify(
+                row_to_script(row)
+            )
+
+    except Exception as error:
+
+        print(
+            f"❌ {database_error_name()} "
+            f"error while loading script:",
+            error
         )
 
-    finally:
-        conn.close()
+        return jsonify({
+            "error": "تعذر تحميل السكربت."
+        }), 500
 
 
 # =========================================================
@@ -1143,11 +1483,9 @@ def create_script():
         silent=True
     ) or {}
 
-
     title = clean_title(
         data.get("title")
     )
-
 
     if not title:
 
@@ -1155,35 +1493,29 @@ def create_script():
             "error": "اكتب اسم السكربت."
         }), 400
 
-
     description = clean_text(
         data.get("description"),
         10000
     )
-
 
     game = clean_text(
         data.get("game"),
         200
     )
 
-
     code = clean_text(
         data.get("code"),
         500000
     )
 
-
     image = valid_image_url(
         data.get("image")
     )
-
 
     category = clean_text(
         data.get("category"),
         100
     )
-
 
     featured = bool(
         data.get(
@@ -1192,101 +1524,141 @@ def create_script():
         )
     )
 
-
-    conn = get_db()
-
     try:
 
-        # -------------------------------------------------
-        # التصنيف اختياري
-        # -------------------------------------------------
+        with get_db() as conn:
 
-        if category:
+            # -------------------------------------------------
+            # Optional category
+            # -------------------------------------------------
 
-            category_exists = conn.execute(
-                """
-                SELECT id, name
-                FROM categories
-                WHERE LOWER(name) = LOWER(?)
-                """,
-                (category,)
-            ).fetchone()
+            if category:
 
+                if using_postgres():
 
-            if not category_exists:
+                    category_exists = fetchone(
+                        conn,
+                        """
+                        SELECT id, name
+                        FROM categories
+                        WHERE LOWER(name) = LOWER(%s)
+                        """,
+                        (category,)
+                    )
 
-                return jsonify({
-                    "error": "التصنيف المحدد غير موجود."
-                }), 400
+                else:
 
+                    category_exists = fetchone(
+                        conn,
+                        """
+                        SELECT id, name
+                        FROM categories
+                        WHERE LOWER(name) = LOWER(?)
+                        """,
+                        (category,)
+                    )
 
-            # الاسم الرسمي للتصنيف
-            category = category_exists["name"]
+                if not category_exists:
 
+                    return jsonify({
+                        "error": (
+                            "التصنيف المحدد غير موجود."
+                        )
+                    }), 400
 
-        # -------------------------------------------------
-        # Insert
-        # -------------------------------------------------
+                category = category_exists["name"]
 
-        cursor = conn.execute(
-            """
-            INSERT INTO scripts
-            (
-                title,
-                description,
-                category,
-                game,
-                code,
-                image,
-                featured,
-                author
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                title,
-                description,
-                category,
-                game,
-                code,
-                image,
-                1 if featured else 0,
-                "Fime",
-            )
-        )
+            # -------------------------------------------------
+            # Insert
+            # -------------------------------------------------
 
+            if using_postgres():
 
-        conn.commit()
+                row = fetchone(
+                    conn,
+                    """
+                    INSERT INTO scripts
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        featured,
+                        author
+                    )
+                    VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s
+                    )
+                    RETURNING *
+                    """,
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        featured,
+                        "Fime",
+                    )
+                )
 
+            else:
 
-        script_id = cursor.lastrowid
+                cursor = conn.execute(
+                    """
+                    INSERT INTO scripts
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        featured,
+                        author
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        1 if featured else 0,
+                        "Fime",
+                    )
+                )
 
+                script_id = cursor.lastrowid
 
-        row = conn.execute(
-            """
-            SELECT *
-            FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        ).fetchone()
+                row = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
 
+            return jsonify({
+                "success": True,
+                "script": row_to_script(row)
+            }), 201
 
-        return jsonify({
-            "success": True,
-            "script": row_to_script(row)
-        }), 201
-
-
-    except sqlite3.Error as error:
-
-        conn.rollback()
+    except Exception as error:
 
         print(
-            "❌ SQLite error while creating script:",
+            f"❌ {database_error_name()} "
+            f"error while creating script:",
             error
         )
-
 
         return jsonify({
             "success": False,
@@ -1295,10 +1667,6 @@ def create_script():
                 "أثناء نشر السكربت."
             )
         }), 500
-
-
-    finally:
-        conn.close()
 
 
 # =========================================================
@@ -1315,11 +1683,9 @@ def update_script(script_id):
         silent=True
     ) or {}
 
-
     title = clean_title(
         data.get("title")
     )
-
 
     if not title:
 
@@ -1327,35 +1693,29 @@ def update_script(script_id):
             "error": "اسم السكربت مطلوب."
         }), 400
 
-
     description = clean_text(
         data.get("description"),
         10000
     )
-
 
     game = clean_text(
         data.get("game"),
         200
     )
 
-
     code = clean_text(
         data.get("code"),
         500000
     )
 
-
     image = valid_image_url(
         data.get("image")
     )
-
 
     category = clean_text(
         data.get("category"),
         100
     )
-
 
     featured = bool(
         data.get(
@@ -1364,113 +1724,168 @@ def update_script(script_id):
         )
     )
 
-
-    conn = get_db()
-
     try:
 
-        existing = conn.execute(
-            """
-            SELECT id
-            FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        ).fetchone()
+        with get_db() as conn:
 
+            # -------------------------------------------------
+            # Existing script
+            # -------------------------------------------------
 
-        if not existing:
+            if using_postgres():
 
-            return jsonify({
-                "error": "السكربت غير موجود."
-            }), 404
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM scripts
+                    WHERE id = %s
+                    """,
+                    (script_id,)
+                )
 
+            else:
 
-        # -------------------------------------------------
-        # التصنيف اختياري
-        # -------------------------------------------------
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
 
-        if category:
-
-            category_exists = conn.execute(
-                """
-                SELECT id, name
-                FROM categories
-                WHERE LOWER(name) = LOWER(?)
-                """,
-                (category,)
-            ).fetchone()
-
-
-            if not category_exists:
+            if not existing:
 
                 return jsonify({
-                    "error": "التصنيف المحدد غير موجود."
-                }), 400
+                    "error": "السكربت غير موجود."
+                }), 404
 
+            # -------------------------------------------------
+            # Optional category
+            # -------------------------------------------------
 
-            category = category_exists["name"]
+            if category:
 
+                if using_postgres():
 
-        # -------------------------------------------------
-        # Update
-        # -------------------------------------------------
+                    category_exists = fetchone(
+                        conn,
+                        """
+                        SELECT id, name
+                        FROM categories
+                        WHERE LOWER(name) = LOWER(%s)
+                        """,
+                        (category,)
+                    )
 
-        conn.execute(
-            """
-            UPDATE scripts
-            SET
-                title = ?,
-                description = ?,
-                category = ?,
-                game = ?,
-                code = ?,
-                image = ?,
-                featured = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (
-                title,
-                description,
-                category,
-                game,
-                code,
-                image,
-                1 if featured else 0,
-                script_id,
-            )
-        )
+                else:
 
+                    category_exists = fetchone(
+                        conn,
+                        """
+                        SELECT id, name
+                        FROM categories
+                        WHERE LOWER(name) = LOWER(?)
+                        """,
+                        (category,)
+                    )
 
-        conn.commit()
+                if not category_exists:
 
+                    return jsonify({
+                        "error": (
+                            "التصنيف المحدد غير موجود."
+                        )
+                    }), 400
 
-        row = conn.execute(
-            """
-            SELECT *
-            FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        ).fetchone()
+                category = category_exists["name"]
 
+            # -------------------------------------------------
+            # Update
+            # -------------------------------------------------
 
-        return jsonify({
-            "success": True,
-            "script": row_to_script(row)
-        })
+            if using_postgres():
 
+                row = fetchone(
+                    conn,
+                    """
+                    UPDATE scripts
+                    SET
+                        title = %s,
+                        description = %s,
+                        category = %s,
+                        game = %s,
+                        code = %s,
+                        image = %s,
+                        featured = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING *
+                    """,
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        featured,
+                        script_id,
+                    )
+                )
 
-    except sqlite3.Error as error:
+            else:
 
-        conn.rollback()
+                conn.execute(
+                    """
+                    UPDATE scripts
+                    SET
+                        title = ?,
+                        description = ?,
+                        category = ?,
+                        game = ?,
+                        code = ?,
+                        image = ?,
+                        featured = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        title,
+                        description,
+                        category,
+                        game,
+                        code,
+                        image,
+                        1 if featured else 0,
+                        script_id,
+                    )
+                )
+
+                row = fetchone(
+                    conn,
+                    """
+                    SELECT *
+                    FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
+
+            return jsonify({
+                "success": True,
+                "script": row_to_script(row)
+            })
+
+    except Exception as error:
 
         print(
-            "❌ SQLite error while updating script:",
+            f"❌ {database_error_name()} "
+            f"error while updating script:",
             error
         )
-
 
         return jsonify({
             "success": False,
@@ -1479,10 +1894,6 @@ def update_script(script_id):
                 "أثناء تعديل السكربت."
             )
         }), 500
-
-
-    finally:
-        conn.close()
 
 
 # =========================================================
@@ -1495,53 +1906,71 @@ def update_script(script_id):
 @owner_required
 def delete_script(script_id):
 
-    conn = get_db()
-
     try:
 
-        existing = conn.execute(
-            """
-            SELECT id
-            FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        ).fetchone()
+        with get_db() as conn:
 
+            if using_postgres():
 
-        if not existing:
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM scripts
+                    WHERE id = %s
+                    """,
+                    (script_id,)
+                )
+
+            else:
+
+                existing = fetchone(
+                    conn,
+                    """
+                    SELECT id
+                    FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
+
+            if not existing:
+
+                return jsonify({
+                    "error": "السكربت غير موجود."
+                }), 404
+
+            if using_postgres():
+
+                conn.execute(
+                    """
+                    DELETE FROM scripts
+                    WHERE id = %s
+                    """,
+                    (script_id,)
+                )
+
+            else:
+
+                conn.execute(
+                    """
+                    DELETE FROM scripts
+                    WHERE id = ?
+                    """,
+                    (script_id,)
+                )
 
             return jsonify({
-                "error": "السكربت غير موجود."
-            }), 404
+                "success": True
+            })
 
-
-        conn.execute(
-            """
-            DELETE FROM scripts
-            WHERE id = ?
-            """,
-            (script_id,)
-        )
-
-
-        conn.commit()
-
-
-        return jsonify({
-            "success": True
-        })
-
-
-    except sqlite3.Error as error:
-
-        conn.rollback()
+    except Exception as error:
 
         print(
-            "❌ SQLite error while deleting script:",
+            f"❌ {database_error_name()} "
+            f"error while deleting script:",
             error
         )
-
 
         return jsonify({
             "success": False,
@@ -1552,8 +1981,50 @@ def delete_script(script_id):
         }), 500
 
 
-    finally:
-        conn.close()
+# =========================================================
+# Health Check
+# =========================================================
+
+@app.get("/api/health")
+def health():
+
+    try:
+
+        with get_db() as conn:
+
+            if using_postgres():
+
+                fetchone(
+                    conn,
+                    "SELECT 1"
+                )
+
+            else:
+
+                fetchone(
+                    conn,
+                    "SELECT 1"
+                )
+
+        return jsonify({
+            "status": "ok",
+            "database": (
+                "postgresql"
+                if using_postgres()
+                else "sqlite"
+            )
+        })
+
+    except Exception as error:
+
+        print(
+            "❌ Database health check failed:",
+            error
+        )
+
+        return jsonify({
+            "status": "error"
+        }), 500
 
 
 # =========================================================
@@ -1575,7 +2046,6 @@ if __name__ == "__main__":
             "8080"
         )
     )
-
 
     app.run(
         host="0.0.0.0",
