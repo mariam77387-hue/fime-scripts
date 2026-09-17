@@ -7,41 +7,36 @@ document.addEventListener(
                 "scriptDetails"
             );
 
-
         if (!container) {
             return;
         }
-
 
         const params =
             new URLSearchParams(
                 window.location.search
             );
 
-
         const id =
             params.get("id");
 
-
         if (!id) {
-
             showError(
                 container,
-                "No script was selected."
+                "لم يتم تحديد أي سكربت."
             );
 
             return;
-
         }
-
 
         try {
 
             const response =
                 await fetch(
-                    "data/scripts.json"
+                    "data/scripts.json",
+                    {
+                        cache: "no-cache"
+                    }
                 );
-
 
             if (!response.ok) {
                 throw new Error(
@@ -49,49 +44,54 @@ document.addEventListener(
                 );
             }
 
-
             const scripts =
                 await response.json();
 
+            if (!Array.isArray(scripts)) {
+                throw new Error(
+                    "Invalid scripts data"
+                );
+            }
 
             const script =
                 scripts.find(
                     item => item.id === id
                 );
 
-
             if (!script) {
 
                 showError(
                     container,
-                    "Script not found."
+                    "السكربت غير موجود."
                 );
 
                 return;
-
             }
-
 
             renderScript(
                 container,
                 script
             );
 
-
         } catch (error) {
 
-            console.error(error);
+            console.error(
+                "Fime Script Page:",
+                error
+            );
 
             showError(
                 container,
-                "Unable to load this script."
+                "تعذر تحميل هذا السكربت."
             );
-
         }
-
     }
 );
 
+
+/*
+ * RENDER SCRIPT
+ */
 
 function renderScript(
     container,
@@ -99,14 +99,24 @@ function renderScript(
 ) {
 
     const tags =
-        (script.tags || [])
-            .map(
-                tag =>
-                    `<span class="tag">
+        (
+            Array.isArray(script.tags)
+                ? script.tags
+                : []
+        )
+            .map(tag => {
+                return `
+                    <span class="tag">
                         ${escapeHTML(tag)}
-                    </span>`
-            )
+                    </span>
+                `;
+            })
             .join("");
+
+
+    const isHack =
+        String(script.type || "")
+            .toLowerCase() === "hack";
 
 
     container.innerHTML = `
@@ -116,9 +126,7 @@ function renderScript(
             <div class="script-card-top">
 
                 <div class="script-icon">
-                    ${script.type?.toLowerCase() === "hack"
-                        ? "🧩"
-                        : "📜"}
+                    ${isHack ? "🧩" : "📜"}
                 </div>
 
                 <span class="script-category">
@@ -131,7 +139,9 @@ function renderScript(
 
 
             <h1>
-                ${escapeHTML(script.name)}
+                ${escapeHTML(
+                    script.name || "بدون اسم"
+                )}
             </h1>
 
 
@@ -143,9 +153,7 @@ function renderScript(
 
 
             <div class="detail-meta">
-
                 ${tags}
-
             </div>
 
         </div>
@@ -156,15 +164,15 @@ function renderScript(
             <div class="code-header">
 
                 <span>
-                    Script Code
+                    كود السكربت
                 </span>
 
                 <button
                     class="copy-code-btn"
-                    id="copyCodeBtn">
-
-                    Copy Code
-
+                    id="copyCodeBtn"
+                    type="button"
+                >
+                    نسخ الكود
                 </button>
 
             </div>
@@ -178,12 +186,13 @@ function renderScript(
         <div class="script-description">
 
             <h2>
-                About this script
+                عن هذا السكربت
             </h2>
 
             <p>
                 ${escapeHTML(
-                    script.description || "No description."
+                    script.description ||
+                    "لا يوجد وصف لهذا السكربت."
                 )}
             </p>
 
@@ -192,55 +201,98 @@ function renderScript(
     `;
 
 
+    /*
+     * CODE
+     *
+     * نستخدم textContent بدل innerHTML
+     * حتى يتم عرض الكود كنص وليس كـ HTML.
+     */
+
     const codeElement =
         document.getElementById(
             "scriptCode"
         );
 
+    if (codeElement) {
 
-    codeElement.textContent =
-        script.code || "";
+        codeElement.textContent =
+            script.code || "";
 
+    }
+
+
+    /*
+     * COPY
+     */
 
     const copyButton =
         document.getElementById(
             "copyCodeBtn"
         );
 
+    if (!copyButton) {
+        return;
+    }
+
 
     copyButton.addEventListener(
         "click",
         async () => {
 
+            const code =
+                script.code || "";
+
+
+            if (!code) {
+
+                copyButton.textContent =
+                    "لا يوجد كود";
+
+                resetCopyButton(
+                    copyButton,
+                    "نسخ الكود",
+                    1500
+                );
+
+                return;
+            }
+
+
             try {
 
                 await navigator.clipboard.writeText(
-                    script.code || ""
+                    code
                 );
 
 
                 copyButton.textContent =
-                    "Copied!";
+                    "تم النسخ ✓";
 
 
-                setTimeout(
-                    () => {
-
-                        copyButton.textContent =
-                            "Copy Code";
-
-                    },
+                resetCopyButton(
+                    copyButton,
+                    "نسخ الكود",
                     1500
                 );
 
 
             } catch (error) {
 
-                console.error(error);
+                console.error(
+                    "Copy error:",
+                    error
+                );
+
 
                 copyButton.textContent =
-                    "Copy failed";
+                    "فشل النسخ";
 
+
+                resetCopyButton(
+                    copyButton,
+                    "نسخ الكود",
+                    1800
+                );
             }
 
         }
@@ -248,6 +300,30 @@ function renderScript(
 
 }
 
+
+/*
+ * RESET COPY BUTTON
+ */
+
+function resetCopyButton(
+    button,
+    text,
+    delay
+) {
+
+    setTimeout(
+        () => {
+            button.textContent = text;
+        },
+        delay
+    );
+
+}
+
+
+/*
+ * ERROR
+ */
 
 function showError(
     container,
@@ -267,8 +343,15 @@ function showError(
             </h3>
 
             <p>
-                Return to the scripts page and try again.
+                ارجع إلى صفحة السكربتات وحاول مرة أخرى.
             </p>
+
+            <a
+                href="scripts.html"
+                class="card-btn primary"
+            >
+                العودة للسكربتات
+            </a>
 
         </div>
 
@@ -276,6 +359,10 @@ function showError(
 
 }
 
+
+/*
+ * SECURITY
+ */
 
 function escapeHTML(value) {
 
