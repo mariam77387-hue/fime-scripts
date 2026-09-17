@@ -2,21 +2,39 @@
 <html lang="ar" dir="rtl">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta name="theme-color" content="#07080d">
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="theme-color"
+        content="#07080d"
+    >
+
+    <meta
+        name="robots"
+        content="noindex, nofollow, noarchive"
+    >
 
     <title>Fime Owner</title>
 
-    <link rel="stylesheet" href="css/style.css">
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
 
     <style>
+
         .owner-page {
-            max-width: 1100px;
+            max-width: 1150px;
             margin: 0 auto;
             padding: 120px 20px 60px;
         }
+
 
         .owner-box {
             background: #10131c;
@@ -26,10 +44,19 @@
             margin-bottom: 20px;
         }
 
+
         .owner-box h1,
-        .owner-box h2 {
+        .owner-box h2,
+        .owner-box h3 {
             margin-top: 0;
         }
+
+
+        .owner-login {
+            max-width: 500px;
+            margin: 140px auto;
+        }
+
 
         .owner-input,
         .owner-textarea,
@@ -47,6 +74,14 @@
             font: inherit;
         }
 
+
+        .owner-input:focus,
+        .owner-textarea:focus,
+        .owner-select:focus {
+            border-color: rgba(124,92,255,.7);
+        }
+
+
         .owner-textarea {
             min-height: 250px;
             resize: vertical;
@@ -55,11 +90,13 @@
             font-family: monospace;
         }
 
+
         .owner-label {
             display: block;
             font-weight: 700;
             margin-top: 10px;
         }
+
 
         .owner-actions {
             display: flex;
@@ -67,22 +104,39 @@
             flex-wrap: wrap;
         }
 
+
         .owner-message {
             margin-top: 15px;
             color: #9a83ff;
         }
 
-        .owner-login {
-            max-width: 500px;
-            margin: 140px auto;
+
+        .owner-message.error {
+            color: #ff7777;
         }
+
+
+        .owner-message.success {
+            color: #62e58a;
+        }
+
+
+        .owner-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+            gap: 20px;
+        }
+
 
         .owner-list {
             display: grid;
             gap: 12px;
         }
 
-        .owner-script {
+
+        .owner-script,
+        .owner-category {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -93,26 +147,169 @@
             border: 1px solid rgba(255,255,255,.06);
         }
 
-        @media (max-width: 700px) {
-            .owner-script {
+
+        .owner-item-info {
+            min-width: 0;
+        }
+
+
+        .owner-item-info strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+
+        .owner-item-info span {
+            color: #9298a8;
+            font-size: 13px;
+        }
+
+
+        .owner-item-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+
+        .owner-danger {
+            border-color:
+                rgba(255,80,80,.2) !important;
+        }
+
+
+        .owner-danger:hover {
+            border-color:
+                rgba(255,80,80,.5) !important;
+        }
+
+
+        .owner-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 18px;
+        }
+
+
+        .owner-section-header h2 {
+            margin-bottom: 0;
+        }
+
+
+        .owner-counter {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            height: 32px;
+            padding: 0 10px;
+            border-radius: 999px;
+            background: rgba(124,92,255,.12);
+            color: #b8a9ff;
+            font-size: 13px;
+        }
+
+
+        .owner-editing {
+            border-color:
+                rgba(124,92,255,.5);
+        }
+
+
+        .owner-empty {
+            color: #9298a8;
+            padding: 20px 0;
+            text-align: center;
+        }
+
+
+        .owner-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 5px 0 20px;
+            cursor: pointer;
+        }
+
+
+        .owner-checkbox input {
+            width: 17px;
+            height: 17px;
+        }
+
+
+        .owner-hint {
+            color: #9298a8;
+            font-size: 13px;
+            margin-top: -8px;
+            margin-bottom: 16px;
+        }
+
+
+        @media (max-width: 800px) {
+
+            .owner-grid {
+                grid-template-columns: 1fr;
+            }
+
+        }
+
+
+        @media (max-width: 650px) {
+
+            .owner-script,
+            .owner-category {
                 flex-direction: column;
                 align-items: stretch;
             }
+
+
+            .owner-item-actions {
+                width: 100%;
+            }
+
+
+            .owner-item-actions .btn {
+                flex: 1;
+            }
+
+
+            .owner-section-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
         }
+
     </style>
+
 </head>
+
 
 <body>
 
+
 <div class="owner-page">
 
-    <div id="loginBox" class="owner-box owner-login">
+
+    <!-- =================================================
+         LOGIN
+    ================================================== -->
+
+    <div
+        id="loginBox"
+        class="owner-box owner-login"
+    >
 
         <h1>🔐 Fime Owner</h1>
 
         <p>
             لوحة إدارة خاصة بالمالك.
         </p>
+
 
         <form id="loginForm">
 
@@ -123,9 +320,11 @@
             <input
                 id="username"
                 class="owner-input"
+                type="text"
                 autocomplete="username"
                 required
             >
+
 
             <label class="owner-label">
                 كلمة المرور
@@ -133,49 +332,177 @@
 
             <input
                 id="password"
-                type="password"
                 class="owner-input"
+                type="password"
                 autocomplete="current-password"
                 required
             >
 
-            <button class="btn btn-primary" type="submit">
+
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
                 دخول
             </button>
 
         </form>
 
-        <div id="loginMessage" class="owner-message"></div>
+
+        <div
+            id="loginMessage"
+            class="owner-message"
+            aria-live="polite"
+        ></div>
 
     </div>
 
 
-    <div id="dashboard" hidden>
+    <!-- =================================================
+         DASHBOARD
+    ================================================== -->
+
+    <div
+        id="dashboard"
+        hidden
+    >
+
+
+        <!-- HEADER -->
 
         <div class="owner-box">
 
-            <h1>⚡ Fime Owner</h1>
+            <div class="owner-section-header">
 
-            <p>
-                إدارة السكربتات بدون إظهار هويتك للزوار.
-            </p>
+                <div>
 
-            <button
-                id="logoutButton"
-                class="btn btn-secondary"
-                type="button"
-            >
-                تسجيل الخروج
-            </button>
+                    <h1>⚡ Fime Owner</h1>
+
+                    <p>
+                        إدارة أقسام وسكربتات الموقع.
+                    </p>
+
+                </div>
+
+                <button
+                    id="logoutButton"
+                    class="btn btn-secondary"
+                    type="button"
+                >
+                    تسجيل الخروج
+                </button>
+
+            </div>
 
         </div>
 
 
+        <!-- =================================================
+             CATEGORIES
+        ================================================== -->
+
         <div class="owner-box">
 
-            <h2>➕ إضافة سكربت</h2>
+            <div class="owner-section-header">
+
+                <h2>
+                    📁 الأقسام
+                </h2>
+
+                <span
+                    id="categoryCount"
+                    class="owner-counter"
+                >
+                    0
+                </span>
+
+            </div>
+
+
+            <form id="categoryForm">
+
+                <label class="owner-label">
+                    اسم القسم
+                </label>
+
+                <input
+                    id="categoryName"
+                    class="owner-input"
+                    type="text"
+                    maxlength="80"
+                    placeholder="مثال: MM2"
+                    required
+                >
+
+
+                <div class="owner-actions">
+
+                    <button
+                        id="categorySubmitButton"
+                        class="btn btn-primary"
+                        type="submit"
+                    >
+                        إضافة القسم
+                    </button>
+
+
+                    <button
+                        id="categoryCancelButton"
+                        class="btn btn-secondary"
+                        type="button"
+                        hidden
+                    >
+                        إلغاء التعديل
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <div
+                id="categoryMessage"
+                class="owner-message"
+                aria-live="polite"
+            ></div>
+
+
+            <br>
+
+
+            <div
+                id="categoriesList"
+                class="owner-list"
+            ></div>
+
+        </div>
+
+
+        <!-- =================================================
+             SCRIPT FORM
+        ================================================== -->
+
+        <div class="owner-box">
+
+            <div class="owner-section-header">
+
+                <div>
+
+                    <h2 id="scriptFormTitle">
+                        ➕ إضافة سكربت
+                    </h2>
+
+                    <p class="owner-hint">
+                        أضف السكربت وحدد القسم الذي سيظهر فيه.
+                    </p>
+
+                </div>
+
+            </div>
+
 
             <form id="scriptForm">
+
 
                 <label class="owner-label">
                     اسم السكربت
@@ -184,8 +511,11 @@
                 <input
                     id="title"
                     class="owner-input"
+                    type="text"
+                    maxlength="150"
                     required
                 >
+
 
                 <label class="owner-label">
                     وصف السكربت
@@ -195,34 +525,82 @@
                     id="description"
                     class="owner-input"
                     rows="4"
+                    maxlength="1000"
                     required
                 ></textarea>
 
-                <label class="owner-label">
-                    اللعبة
-                </label>
 
-                <input
-                    id="game"
-                    class="owner-input"
-                    placeholder="مثال: Roblox"
-                >
+                <div class="owner-grid">
+
+                    <div>
+
+                        <label class="owner-label">
+                            اللعبة
+                        </label>
+
+                        <input
+                            id="game"
+                            class="owner-input"
+                            type="text"
+                            maxlength="100"
+                            placeholder="مثال: Roblox"
+                        >
+
+                    </div>
+
+
+                    <div>
+
+                        <label class="owner-label">
+                            نوع المحتوى
+                        </label>
+
+                        <input
+                            id="type"
+                            class="owner-input"
+                            type="text"
+                            maxlength="50"
+                            value="Script"
+                            placeholder="Script / Hack / Tool"
+                        >
+
+                    </div>
+
+                </div>
+
 
                 <label class="owner-label">
                     التصنيف
                 </label>
 
-                <select id="category" class="owner-select">
+                <select
+                    id="category"
+                    class="owner-select"
+                    required
+                >
 
-                    <option value="scripts">
-                        Scripts
-                    </option>
-
-                    <option value="hacks">
-                        Hacks
+                    <option value="">
+                        اختر قسمًا
                     </option>
 
                 </select>
+
+
+                <label class="owner-label">
+                    Tags
+                </label>
+
+                <input
+                    id="tags"
+                    class="owner-input"
+                    type="text"
+                    placeholder="MM2, Roblox, Mobile"
+                >
+
+                <p class="owner-hint">
+                    افصل بين الكلمات بفاصلة.
+                </p>
+
 
                 <label class="owner-label">
                     رابط الصورة — اختياري
@@ -232,8 +610,10 @@
                     id="image"
                     class="owner-input"
                     type="url"
+                    maxlength="1000"
                     placeholder="https://..."
                 >
+
 
                 <label class="owner-label">
                     الكود
@@ -242,39 +622,80 @@
                 <textarea
                     id="code"
                     class="owner-textarea"
+                    spellcheck="false"
                     required
                 ></textarea>
 
-                <label>
+
+                <label class="owner-checkbox">
+
                     <input
                         id="featured"
                         type="checkbox"
                     >
-                    سكربت مميز
+
+                    <span>
+                        ⭐ سكربت مميز
+                    </span>
+
                 </label>
 
-                <br><br>
 
-                <button
-                    class="btn btn-primary"
-                    type="submit"
-                >
-                    نشر السكربت
-                </button>
+                <div class="owner-actions">
+
+                    <button
+                        id="scriptSubmitButton"
+                        class="btn btn-primary"
+                        type="submit"
+                    >
+                        نشر السكربت
+                    </button>
+
+
+                    <button
+                        id="scriptCancelButton"
+                        class="btn btn-secondary"
+                        type="button"
+                        hidden
+                    >
+                        إلغاء التعديل
+                    </button>
+
+                </div>
 
             </form>
+
 
             <div
                 id="scriptMessage"
                 class="owner-message"
+                aria-live="polite"
             ></div>
 
         </div>
 
 
+        <!-- =================================================
+             SCRIPTS LIST
+        ================================================== -->
+
         <div class="owner-box">
 
-            <h2>📚 السكربتات المنشورة</h2>
+            <div class="owner-section-header">
+
+                <h2>
+                    📚 السكربتات المنشورة
+                </h2>
+
+                <span
+                    id="scriptCount"
+                    class="owner-counter"
+                >
+                    0
+                </span>
+
+            </div>
+
 
             <div
                 id="scriptsList"
@@ -282,6 +703,7 @@
             ></div>
 
         </div>
+
 
     </div>
 
@@ -291,4 +713,5 @@
 <script src="js/owner.js"></script>
 
 </body>
+
 </html>
