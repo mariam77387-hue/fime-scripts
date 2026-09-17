@@ -1,0 +1,29 @@
+[
+    {
+        "id": "example-script",
+        "name": "Example Script",
+        "description": "This is an example script. Replace this content with your own script.",
+        "category": "Roblox",
+        "type": "Script",
+        "tags": [
+            "Example",
+            "Test"
+        ],
+        "code": "-- Put your script here\nprint(\"Hello from Fime!\")",
+        "featured": true
+    },
+
+    {
+        "id": "example-tool",
+        "name": "Example Tool",
+        "description": "Another example item for the Fime library.",
+        "category": "Tools",
+        "type": "Tool",
+        "tags": [
+            "Tool",
+            "Example"
+        ],
+        "code": "-- Your code here\nprint(\"Fime\")",
+        "featured": false
+    }
+]
