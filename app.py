@@ -21,7 +21,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE = BASE_DIR / "fime.db"
 
-
 app = Flask(
     __name__,
     static_folder=".",
@@ -30,7 +29,7 @@ app = Flask(
 
 
 # =========================================================
-# SECURITY / SESSION
+# SESSION / SECURITY
 # =========================================================
 
 SESSION_SECRET = os.environ.get("SESSION_SECRET")
@@ -41,9 +40,7 @@ if not SESSION_SECRET:
         "Add it to Render Environment Variables."
     )
 
-
 app.secret_key = SESSION_SECRET
-
 
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -62,11 +59,9 @@ OWNER_USERNAME = os.environ.get(
     "owner"
 ).strip()
 
-
 OWNER_PASSWORD = os.environ.get(
     "OWNER_PASSWORD"
 )
-
 
 if not OWNER_PASSWORD:
     raise RuntimeError(
@@ -74,9 +69,6 @@ if not OWNER_PASSWORD:
         "Add it to Render Environment Variables."
     )
 
-
-# نحول كلمة المرور إلى Hash عند تشغيل السيرفر.
-# كلمة المرور الأصلية لا يتم إرسالها للواجهة.
 OWNER_PASSWORD_HASH = generate_password_hash(
     OWNER_PASSWORD
 )
@@ -100,6 +92,7 @@ def get_db():
 def init_db():
     db = get_db()
 
+    # جدول السكربتات
     db.execute("""
         CREATE TABLE IF NOT EXISTS scripts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +102,7 @@ def init_db():
             description TEXT NOT NULL,
 
             category TEXT NOT NULL
-                DEFAULT 'scripts',
+                DEFAULT 'Scripts',
 
             game TEXT NOT NULL
                 DEFAULT '',
@@ -125,6 +118,48 @@ def init_db():
                 DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # جدول التصنيفات
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            name TEXT NOT NULL UNIQUE,
+
+            created_at TEXT NOT NULL
+                DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # التصنيفات الأساسية
+    default_categories = [
+        "Scripts",
+        "Hacks"
+    ]
+
+    for category in default_categories:
+        db.execute("""
+            INSERT OR IGNORE INTO categories (name)
+            VALUES (?)
+        """, (category,))
+
+    # التأكد أن أي تصنيف قديم موجود في scripts
+    # يتم إضافته أيضًا إلى جدول categories.
+    existing_categories = db.execute("""
+        SELECT DISTINCT category
+        FROM scripts
+        WHERE category IS NOT NULL
+        AND TRIM(category) != ''
+    """).fetchall()
+
+    for row in existing_categories:
+        category_name = row["category"].strip()
+
+        if category_name:
+            db.execute("""
+                INSERT OR IGNORE INTO categories (name)
+                VALUES (?)
+            """, (category_name,))
 
     db.commit()
     db.close()
@@ -199,7 +234,6 @@ def security_headers(response):
 
 @app.get("/")
 def index():
-
     return send_from_directory(
         BASE_DIR,
         "index.html"
@@ -208,7 +242,6 @@ def index():
 
 @app.get("/scripts")
 def scripts_page():
-
     return send_from_directory(
         BASE_DIR,
         "scripts.html"
@@ -217,7 +250,6 @@ def scripts_page():
 
 @app.get("/hacks")
 def hacks_page():
-
     return send_from_directory(
         BASE_DIR,
         "hacks.html"
@@ -226,7 +258,6 @@ def hacks_page():
 
 @app.get("/script")
 def script_page():
-
     return send_from_directory(
         BASE_DIR,
         "script.html"
@@ -235,7 +266,6 @@ def script_page():
 
 @app.get("/owner")
 def owner_page():
-
     return send_from_directory(
         BASE_DIR,
         "owner.html"
@@ -253,14 +283,12 @@ def owner_login():
         silent=True
     ) or {}
 
-
     username = str(
         data.get(
             "username",
             ""
         )
     ).strip()
-
 
     password = str(
         data.get(
@@ -269,12 +297,9 @@ def owner_login():
         )
     )
 
-
-    # إذا command-bar أرسل كلمة المرور فقط،
-    # نستخدم اسم المستخدم الموجود في Render.
+    # يسمح بالدخول من command-bar بكلمة المرور فقط.
     if not username:
         username = OWNER_USERNAME
-
 
     if username != OWNER_USERNAME:
 
@@ -283,14 +308,12 @@ def owner_login():
             "error": "بيانات الدخول غير صحيحة."
         }), 401
 
-
     if not password:
 
         return jsonify({
             "success": False,
             "error": "كلمة المرور مطلوبة."
         }), 400
-
 
     if not check_password_hash(
         OWNER_PASSWORD_HASH,
@@ -302,8 +325,6 @@ def owner_login():
             "error": "بيانات الدخول غير صحيحة."
         }), 401
 
-
-    # إنشاء جلسة جديدة بعد نجاح الدخول.
     session.clear()
 
     session["owner_authenticated"] = True
@@ -328,7 +349,7 @@ def owner_logout():
 
 
 # =========================================================
-# OWNER SESSION STATUS
+# OWNER SESSION
 # =========================================================
 
 @app.get("/api/owner/me")
@@ -347,14 +368,185 @@ def owner_me():
 
 
 # =========================================================
-# PUBLIC — GET ALL SCRIPTS
+# PUBLIC — CATEGORIES
+# =========================================================
+
+@app.get("/api/categories")
+def get_categories():
+
+    db = get_db()
+
+    rows = db.execute("""
+        SELECT
+            id,
+            name
+        FROM categories
+        ORDER BY
+            id ASC
+    """).fetchall()
+
+    db.close()
+
+    return jsonify([
+        {
+            "id": row["id"],
+            "name": row["name"]
+        }
+        for row in rows
+    ])
+
+
+# =========================================================
+# OWNER — CREATE CATEGORY
+# =========================================================
+
+@app.post("/api/owner/categories")
+@owner_required
+def create_category():
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    name = str(
+        data.get(
+            "name",
+            ""
+        )
+    ).strip()
+
+    if not name:
+
+        return jsonify({
+            "success": False,
+            "error": "اكتب اسم التصنيف."
+        }), 400
+
+    if len(name) > 80:
+
+        return jsonify({
+            "success": False,
+            "error": "اسم التصنيف طويل جدًا."
+        }), 400
+
+    db = get_db()
+
+    existing = db.execute("""
+        SELECT id
+        FROM categories
+        WHERE LOWER(name) = LOWER(?)
+    """, (name,)).fetchone()
+
+    if existing:
+
+        db.close()
+
+        return jsonify({
+            "success": False,
+            "error": "هذا التصنيف موجود بالفعل."
+        }), 409
+
+    cursor = db.execute("""
+        INSERT INTO categories (name)
+        VALUES (?)
+    """, (name,))
+
+    db.commit()
+
+    category_id = cursor.lastrowid
+
+    db.close()
+
+    return jsonify({
+        "success": True,
+        "id": category_id,
+        "name": name
+    }), 201
+
+
+# =========================================================
+# OWNER — DELETE CATEGORY
+# =========================================================
+
+@app.delete("/api/owner/categories/<int:category_id>")
+@owner_required
+def delete_category(category_id):
+
+    db = get_db()
+
+    category = db.execute("""
+        SELECT
+            id,
+            name
+        FROM categories
+        WHERE id = ?
+    """, (category_id,)).fetchone()
+
+    if not category:
+
+        db.close()
+
+        return jsonify({
+            "success": False,
+            "error": "التصنيف غير موجود."
+        }), 404
+
+    category_name = category["name"]
+
+    # لا نحذف Scripts و Hacks الأساسيين.
+    if category_name.lower() in {
+        "scripts",
+        "hacks"
+    }:
+
+        db.close()
+
+        return jsonify({
+            "success": False,
+            "error": "لا يمكن حذف التصنيف الأساسي."
+        }), 400
+
+    # لا نحذف تصنيفًا يحتوي على سكربتات.
+    scripts_count = db.execute("""
+        SELECT COUNT(*)
+        AS count
+        FROM scripts
+        WHERE category = ?
+    """, (category_name,)).fetchone()["count"]
+
+    if scripts_count > 0:
+
+        db.close()
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "لا يمكن حذف هذا التصنيف لأنه يحتوي "
+                "على سكربتات. انقل السكربتات أولًا."
+            )
+        }), 400
+
+    db.execute("""
+        DELETE FROM categories
+        WHERE id = ?
+    """, (category_id,))
+
+    db.commit()
+    db.close()
+
+    return jsonify({
+        "success": True
+    })
+
+
+# =========================================================
+# PUBLIC — ALL SCRIPTS
 # =========================================================
 
 @app.get("/api/scripts")
 def get_scripts():
 
     db = get_db()
-
 
     rows = db.execute("""
         SELECT
@@ -367,28 +559,25 @@ def get_scripts():
             image,
             featured,
             created_at
-
         FROM scripts
-
         ORDER BY
             featured DESC,
             id DESC
     """).fetchall()
 
-
     db.close()
 
-
     scripts = []
-
 
     for row in rows:
 
         scripts.append({
 
-            "id": row["id"],
+            "id":
+                row["id"],
 
-            "title": row["title"],
+            "title":
+                row["title"],
 
             "description":
                 row["description"],
@@ -408,24 +597,21 @@ def get_scripts():
             "featured":
                 bool(row["featured"]),
 
-            # لا يتم إظهار هوية المالك.
-            "author": "Fime"
-
+            "author":
+                "Fime"
         })
-
 
     return jsonify(scripts)
 
 
 # =========================================================
-# PUBLIC — GET SINGLE SCRIPT
+# PUBLIC — SINGLE SCRIPT
 # =========================================================
 
 @app.get("/api/scripts/<int:script_id>")
 def get_script(script_id):
 
     db = get_db()
-
 
     row = db.execute("""
         SELECT
@@ -438,17 +624,11 @@ def get_script(script_id):
             image,
             featured,
             created_at
-
         FROM scripts
-
         WHERE id = ?
-    """, (
-        script_id,
-    )).fetchone()
-
+    """, (script_id,)).fetchone()
 
     db.close()
-
 
     if not row:
 
@@ -456,7 +636,6 @@ def get_script(script_id):
             "success": False,
             "error": "Script not found."
         }), 404
-
 
     return jsonify({
 
@@ -486,7 +665,6 @@ def get_script(script_id):
 
         "author":
             "Fime"
-
     })
 
 
@@ -502,14 +680,12 @@ def create_script():
         silent=True
     ) or {}
 
-
     title = str(
         data.get(
             "title",
             ""
         )
     ).strip()
-
 
     description = str(
         data.get(
@@ -518,14 +694,12 @@ def create_script():
         )
     ).strip()
 
-
     category = str(
         data.get(
             "category",
-            "scripts"
+            ""
         )
     ).strip()
-
 
     game = str(
         data.get(
@@ -534,14 +708,12 @@ def create_script():
         )
     ).strip()
 
-
     code = str(
         data.get(
             "code",
             ""
         )
     )
-
 
     image = str(
         data.get(
@@ -550,14 +722,12 @@ def create_script():
         )
     ).strip()
 
-
     featured = bool(
         data.get(
             "featured",
             False
         )
     )
-
 
     # =====================================================
     # VALIDATION
@@ -570,7 +740,6 @@ def create_script():
             "error": "اكتب اسم السكربت."
         }), 400
 
-
     if not description:
 
         return jsonify({
@@ -578,6 +747,12 @@ def create_script():
             "error": "اكتب وصف السكربت."
         }), 400
 
+    if not category:
+
+        return jsonify({
+            "success": False,
+            "error": "اختر تصنيفًا."
+        }), 400
 
     if not code:
 
@@ -586,20 +761,25 @@ def create_script():
             "error": "ضع كود السكربت."
         }), 400
 
+    db = get_db()
 
-    if category not in (
-        "scripts",
-        "hacks"
-    ):
+    category_exists = db.execute("""
+        SELECT id
+        FROM categories
+        WHERE LOWER(name) = LOWER(?)
+    """, (category,)).fetchone()
+
+    if not category_exists:
+
+        db.close()
 
         return jsonify({
             "success": False,
-            "error": "تصنيف غير صالح."
+            "error": "التصنيف غير موجود."
         }), 400
 
-
-    db = get_db()
-
+    # نستخدم الاسم الرسمي للتصنيف.
+    category = category_exists["name"]
 
     cursor = db.execute("""
         INSERT INTO scripts (
@@ -611,42 +791,26 @@ def create_script():
             image,
             featured
         )
-
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-
         title,
-
         description,
-
         category,
-
         game,
-
         code,
-
         image,
-
         int(featured)
-
     ))
-
 
     db.commit()
 
-
     script_id = cursor.lastrowid
-
 
     db.close()
 
-
     return jsonify({
-
         "success": True,
-
         "id": script_id
-
     }), 201
 
 
@@ -662,14 +826,12 @@ def update_script(script_id):
         silent=True
     ) or {}
 
-
     title = str(
         data.get(
             "title",
             ""
         )
     ).strip()
-
 
     description = str(
         data.get(
@@ -678,14 +840,12 @@ def update_script(script_id):
         )
     ).strip()
 
-
     category = str(
         data.get(
             "category",
-            "scripts"
+            ""
         )
     ).strip()
-
 
     game = str(
         data.get(
@@ -694,14 +854,12 @@ def update_script(script_id):
         )
     ).strip()
 
-
     code = str(
         data.get(
             "code",
             ""
         )
     )
-
 
     image = str(
         data.get(
@@ -710,14 +868,12 @@ def update_script(script_id):
         )
     ).strip()
 
-
     featured = bool(
         data.get(
             "featured",
             False
         )
     )
-
 
     if not title:
 
@@ -726,7 +882,6 @@ def update_script(script_id):
             "error": "اسم السكربت مطلوب."
         }), 400
 
-
     if not description:
 
         return jsonify({
@@ -734,6 +889,12 @@ def update_script(script_id):
             "error": "وصف السكربت مطلوب."
         }), 400
 
+    if not category:
+
+        return jsonify({
+            "success": False,
+            "error": "اختر تصنيفًا."
+        }), 400
 
     if not code:
 
@@ -742,24 +903,27 @@ def update_script(script_id):
             "error": "كود السكربت مطلوب."
         }), 400
 
+    db = get_db()
 
-    if category not in (
-        "scripts",
-        "hacks"
-    ):
+    category_exists = db.execute("""
+        SELECT id, name
+        FROM categories
+        WHERE LOWER(name) = LOWER(?)
+    """, (category,)).fetchone()
+
+    if not category_exists:
+
+        db.close()
 
         return jsonify({
             "success": False,
-            "error": "تصنيف غير صالح."
+            "error": "التصنيف غير موجود."
         }), 400
 
-
-    db = get_db()
-
+    category = category_exists["name"]
 
     cursor = db.execute("""
         UPDATE scripts
-
         SET
             title = ?,
             description = ?,
@@ -768,37 +932,23 @@ def update_script(script_id):
             code = ?,
             image = ?,
             featured = ?
-
         WHERE id = ?
     """, (
-
         title,
-
         description,
-
         category,
-
         game,
-
         code,
-
         image,
-
         int(featured),
-
         script_id
-
     ))
-
 
     db.commit()
 
-
     changed = cursor.rowcount
 
-
     db.close()
-
 
     if not changed:
 
@@ -806,7 +956,6 @@ def update_script(script_id):
             "success": False,
             "error": "السكربت غير موجود."
         }), 404
-
 
     return jsonify({
         "success": True
@@ -823,24 +972,16 @@ def delete_script(script_id):
 
     db = get_db()
 
-
     cursor = db.execute("""
         DELETE FROM scripts
-
         WHERE id = ?
-    """, (
-        script_id,
-    ))
-
+    """, (script_id,))
 
     db.commit()
 
-
     deleted = cursor.rowcount
 
-
     db.close()
-
 
     if not deleted:
 
@@ -848,7 +989,6 @@ def delete_script(script_id):
             "success": False,
             "error": "السكربت غير موجود."
         }), 404
-
 
     return jsonify({
         "success": True
@@ -862,21 +1002,19 @@ def delete_script(script_id):
 @app.get("/<path:path>")
 def static_files(path):
 
-    # منع الملفات الحساسة.
-    normalized = path.replace("\\", "/").strip("/")
-
+    normalized = path.replace(
+        "\\",
+        "/"
+    ).strip("/")
 
     blocked_files = {
         "fime.db",
         ".env",
-        ".git",
         "app.py",
         "requirements.txt",
     }
 
-
     first_part = normalized.split("/")[0]
-
 
     if (
         normalized in blocked_files
@@ -891,13 +1029,10 @@ def static_files(path):
             "error": "Not found"
         }), 404
 
-
     requested = (
         BASE_DIR / normalized
     ).resolve()
 
-
-    # منع Path Traversal.
     try:
 
         requested.relative_to(
@@ -910,7 +1045,6 @@ def static_files(path):
             "error": "Not found"
         }), 404
 
-
     if (
         requested.exists()
         and requested.is_file()
@@ -921,14 +1055,13 @@ def static_files(path):
             normalized
         )
 
-
     return jsonify({
         "error": "Not found"
     }), 404
 
 
 # =========================================================
-# STARTUP
+# START
 # =========================================================
 
 init_db()
@@ -942,7 +1075,6 @@ if __name__ == "__main__":
             10000
         )
     )
-
 
     app.run(
         host="0.0.0.0",
