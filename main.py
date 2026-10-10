@@ -9,8 +9,7 @@ import urllib.error
 from datetime import datetime
 
 # ==========================================
-# Discord Username Generator + Checker
-# Replit / main.py
+# Username Finder - Replit / main.py
 # ==========================================
 
 API_URL = (
@@ -21,89 +20,113 @@ API_URL = (
 OUTPUT_DIR = "results"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-CHARS = string.ascii_lowercase + string.digits
+LETTERS = string.ascii_lowercase
+DIGITS = string.digits
+
+HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "*/*",
+    "Origin": "https://discord.com",
+    "Referer": "https://discord.com/register",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
 
 
 def generate_username(length, letters_only=False):
-    chars = string.ascii_lowercase if letters_only else CHARS
+    chars = LETTERS if letters_only else LETTERS + DIGITS
     return "".join(random.choices(chars, k=length))
 
 
-def check_username(username):
-    """يفحص الاسم. لا يخمّن الإتاحة عند وجود خطأ."""
-    payload = json.dumps({"username": username}).encode("utf-8")
+def valid_username(name):
+    if not 2 <= len(name) <= 32:
+        return False
+    if any(c not in LETTERS + DIGITS + "._" for c in name):
+        return False
+    if name.startswith(".") or name.endswith("."):
+        return False
+    if ".." in name:
+        return False
+    return True
 
+
+def check_username(name):
+    """النتيجة: available / taken / unknown / rate_limited."""
+    name = name.lower()
+
+    if not valid_username(name):
+        return "invalid"
+
+    payload = json.dumps({"username": name}).encode("utf-8")
     request = urllib.request.Request(
         API_URL,
         data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Python Username Availability Checker",
-        },
+        headers=HEADERS,
         method="POST",
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with urllib.request.urlopen(request, timeout=15) as response:
             data = json.loads(response.read().decode("utf-8"))
 
-        # لا نعتبر الاسم متاحًا إلا إذا أعادت الواجهة
-        # حقلًا واضحًا يدل على الإتاحة.
-        if isinstance(data, dict) and data.get("taken") is False:
-            return "AVAILABLE"
+        if not isinstance(data, dict):
+            return "unknown"
 
-        if isinstance(data, dict) and data.get("taken") is True:
-            return "TAKEN"
+        taken = data.get("taken")
 
-        if isinstance(data, dict) and data.get("username") == username:
-            return "CHECK_MANUALLY"
+        if taken is True:
+            return "taken"
+        if taken is False:
+            return "available"
 
-        return "UNKNOWN"
+        return "unknown"
 
     except urllib.error.HTTPError as error:
         if error.code == 429:
-            return "RATE_LIMITED"
-        if error.code in (400, 401, 403, 404):
-            return "CHECK_FAILED"
-        return "CHECK_FAILED"
+            return "rate_limited"
+        return "unknown"
 
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
-        return "CHECK_FAILED"
+        return "unknown"
 
 
-def save_names(filename, names):
+def save_file(filename, values):
     with open(filename, "w", encoding="utf-8") as file:
-        for name in names:
-            file.write(name + "\n")
+        for value in values:
+            file.write(value + "\n")
 
 
 def main():
     print("=" * 48)
-    print(" DISCORD USERNAME CHECKER")
-    print(" مولد وفاحص اقتراحات اليوزرات")
+    print("   USERNAME FINDER")
+    print("   مولّد وفاحص أسماء المستخدمين")
     print("=" * 48)
-    print("ملاحظة: فحص الإتاحة يعتمد على واجهة غير رسمية.")
-    print("لن يتم تجاوز تحديد الطلبات أو إعادة المحاولة آليًا.\n")
+    print("ملاحظة: نتيجة الفحص تعتمد على استجابة الواجهة.\n")
 
-    while True:
-        try:
-            amount = int(input("عدد الأسماء المطلوب توليدها (1-500): "))
-            if 1 <= amount <= 500:
-                break
-        except ValueError:
-            pass
-        print("أدخل عددًا صحيحًا بين 1 و500.")
+    try:
+        amount = int(input("عدد الأسماء (1-200): "))
+        if not 1 <= amount <= 200:
+            print("اختر عددًا من 1 إلى 200.")
+            return
+    except ValueError:
+        print("الرجاء إدخال رقم صحيح.")
+        return
 
     print("\n1 - ثلاثة أحرف")
     print("2 - أربعة أحرف")
     print("3 - خليط من 3 و4 أحرف")
-
     choice = input("اختيارك: ").strip()
+
     if choice not in ("1", "2", "3"):
         print("اختيار غير صحيح.")
         return
 
-    letters_only = input("حروف فقط؟ (y/n): ").strip().lower() == "y"
+    letters_only = (
+        input("حروف فقط؟ (y/n): ").strip().lower() == "y"
+    )
 
     if choice == "1":
         lengths = [3]
@@ -113,7 +136,6 @@ def main():
         lengths = [3, 4]
 
     candidates = set()
-
     while len(candidates) < amount:
         length = random.choice(lengths)
         candidates.add(generate_username(length, letters_only))
@@ -121,51 +143,57 @@ def main():
     available = []
     taken = []
     unknown = []
+    stopped = False
 
-    print("\nبدء الفحص، طلب واحد كل ثانيتين.\n")
+    print("\nبدأ الفحص...\n")
 
-    for index, username in enumerate(candidates, 1):
-        result = check_username(username)
-        print(f"[{index}/{len(candidates)}] {username}: {result}")
+    for index, name in enumerate(candidates, start=1):
+        status = check_username(name)
+        print(f"[{index}/{amount}] {name} -> {status}")
 
-        if result == "AVAILABLE":
-            available.append(username)
-        elif result == "TAKEN":
-            taken.append(username)
-        else:
-            unknown.append(f"{username} | {result}")
-
-        if result == "RATE_LIMITED":
+        if status == "available":
+            available.append(name)
+        elif status == "taken":
+            taken.append(name)
+        elif status == "rate_limited":
+            unknown.append(name + " | rate_limited")
             print(
-                "\nديسكورد حدّ الطلبات. تم إيقاف الفحص "
-                "بدل محاولة تجاوز الحد."
+                "\nتم إيقاف الفحص لأن الخدمة حدّت الطلبات. "
+                "أعد التشغيل لاحقًا بدل تجاوز الحد."
             )
+            stopped = True
             break
+        else:
+            unknown.append(name + " | " + status)
 
-        if index < len(candidates):
+        if index < amount:
             time.sleep(2)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    save_names(
+    save_file(
         os.path.join(OUTPUT_DIR, f"available_{stamp}.txt"),
-        available
+        available,
     )
-    save_names(
+    save_file(
         os.path.join(OUTPUT_DIR, f"taken_{stamp}.txt"),
-        taken
+        taken,
     )
-    save_names(
+    save_file(
         os.path.join(OUTPUT_DIR, f"unknown_{stamp}.txt"),
-        unknown
+        unknown,
     )
 
     print("\n" + "=" * 48)
-    print(f"متاح حسب استجابة الواجهة: {len(available)}")
-    print(f"مشغول حسب استجابة الواجهة: {len(taken)}")
-    print(f"غير مؤكد أو تعذر فحصه: {len(unknown)}")
-    print(f"راجع مجلد النتائج: {OUTPUT_DIR}")
-    print("تحقق من الاسم داخل إعدادات ديسكورد قبل الاعتماد عليه.")
+    print(f"متاح بحسب الاستجابة: {len(available)}")
+    print(f"مشغول بحسب الاستجابة: {len(taken)}")
+    print(f"غير مؤكد: {len(unknown)}")
+    print(f"النتائج محفوظة في مجلد: {OUTPUT_DIR}")
+
+    if stopped:
+        print("الفحص توقف بسبب تحديد الطلبات.")
+
+    print("تحقق من الاسم نهائيًا في إعدادات ديسكورد.")
     print("=" * 48)
 
 
@@ -173,4 +201,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nأوقف المستخدم الأداة.")
+        print("\nتم إيقاف البرنامج.")
