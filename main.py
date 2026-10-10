@@ -8,9 +8,10 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-# ==========================================
-# Username Finder - Replit / main.py
-# ==========================================
+# ==============================================
+# PRO USERNAME FINDER - Replit / main.py
+# توليد وفحص أسماء المستخدمين
+# ==============================================
 
 API_URL = (
     "https://discord.com/api/v9/"
@@ -22,29 +23,28 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 LETTERS = string.ascii_lowercase
 DIGITS = string.digits
+ALNUM = LETTERS + DIGITS
 
 HEADERS = {
     "Content-Type": "application/json",
-    "Accept": "*/*",
-    "Origin": "https://discord.com",
-    "Referer": "https://discord.com/register",
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
+    "Accept": "application/json",
+    "User-Agent": "UsernameAvailabilityChecker/1.0",
 }
 
+# إعادة المحاولة للأخطاء المؤقتة
+RETRIES = 3
+BASE_DELAY = 2.0
+MAX_CONSECUTIVE_SERVICE_ERRORS = 10
 
-def generate_username(length, letters_only=False):
-    chars = LETTERS if letters_only else LETTERS + DIGITS
-    return "".join(random.choices(chars, k=length))
+
+def timestamp():
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 def valid_username(name):
     if not 2 <= len(name) <= 32:
         return False
-    if any(c not in LETTERS + DIGITS + "._" for c in name):
+    if any(c not in ALNUM + "._" for c in name):
         return False
     if name.startswith(".") or name.endswith("."):
         return False
@@ -53,14 +53,22 @@ def valid_username(name):
     return True
 
 
-def check_username(name):
-    """النتيجة: available / taken / unknown / rate_limited."""
-    name = name.lower()
+def generate_username(length, letters_only=False):
+    chars = LETTERS if letters_only else ALNUM
+    return "".join(random.choices(chars, k=length))
 
-    if not valid_username(name):
-        return "invalid"
 
-    payload = json.dumps({"username": name}).encode("utf-8")
+def request_check(name):
+    """
+    ترجع:
+      available / taken / invalid / unknown / rate_limited
+    مع مدة الانتظار إن كانت الخدمة قد حددتها.
+    """
+    payload = json.dumps(
+        {"username": name},
+        separators=(",", ":"),
+    ).encode("utf-8")
+
     request = urllib.request.Request(
         API_URL,
         data=payload,
@@ -70,46 +78,112 @@ def check_username(name):
 
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
-            data = json.loads(response.read().decode("utf-8"))
+            body = response.read().decode("utf-8", errors="replace")
+            data = json.loads(body)
 
         if not isinstance(data, dict):
-            return "unknown"
+            return "unknown", 0
 
         taken = data.get("taken")
 
-        if taken is True:
-            return "taken"
         if taken is False:
-            return "available"
+            return "available", 0
 
-        return "unknown"
+        if taken is True:
+            return "taken", 0
+
+        return "unknown", 0
 
     except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")
+
         if error.code == 429:
-            return "rate_limited"
-        return "unknown"
+            wait_seconds = 0
 
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
-        return "unknown"
+            retry_after = error.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    wait_seconds = float(retry_after)
+                except ValueError:
+                    pass
+
+            try:
+                data = json.loads(body)
+                wait_seconds = max(
+                    wait_seconds,
+                    float(data.get("retry_after", 0)),
+                )
+            except (ValueError, TypeError, json.JSONDecodeError):
+                pass
+
+            return "rate_limited", max(wait_seconds, 1)
+
+        if error.code in (400, 422):
+            return "invalid", 0
+
+        return "unknown", 0
+
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        OSError,
+        ValueError,
+    ):
+        return "unknown", 0
 
 
-def save_file(filename, values):
-    with open(filename, "w", encoding="utf-8") as file:
-        for value in values:
-            file.write(value + "\n")
+def check_with_retries(name):
+    """إعادة المحاولة عند تعذّر الفحص."""
+    for attempt in range(RETRIES):
+        status, wait_seconds = request_check(name)
+
+        if status == "rate_limited":
+            print(
+                f"\n[انتظار] الخدمة حددت الطلبات. "
+                f"الانتظار {wait_seconds:.1f} ثانية."
+            )
+            time.sleep(wait_seconds)
+            # إعادة فحص الاسم نفسه بعد انتهاء الانتظار
+            continue
+
+        if status != "unknown":
+            return status
+
+        if attempt < RETRIES - 1:
+            delay = BASE_DELAY * (2 ** attempt)
+            print(
+                f"[إعادة محاولة {attempt + 1}/{RETRIES - 1}] "
+                f"تعذر التأكد من {name}، انتظار {delay:.0f} ث."
+            )
+            time.sleep(delay)
+
+    return "unknown"
+
+
+def save_available(names, filepath):
+    with open(filepath, "w", encoding="utf-8") as file:
+        file.write("\n".join(names))
+        if names:
+            file.write("\n")
+
+
+def append_line(filepath, line):
+    with open(filepath, "a", encoding="utf-8") as file:
+        file.write(line + "\n")
 
 
 def main():
-    print("=" * 48)
-    print("   USERNAME FINDER")
-    print("   مولّد وفاحص أسماء المستخدمين")
-    print("=" * 48)
-    print("ملاحظة: نتيجة الفحص تعتمد على استجابة الواجهة.\n")
+    print("=" * 54)
+    print("       PRO USERNAME FINDER")
+    print("       أداة البحث عن يوزرات متاحة")
+    print("=" * 54)
+    print("تستمر الأداة حتى تجد العدد المطلوب.")
+    print("أوقفها يدويًا باستخدام Ctrl+C عند الحاجة.\n")
 
     try:
-        amount = int(input("عدد الأسماء (1-200): "))
-        if not 1 <= amount <= 200:
-            print("اختر عددًا من 1 إلى 200.")
+        target = int(input("كم يوزر متاح تريد العثور عليه؟ (1-100): "))
+        if not 1 <= target <= 100:
+            print("أدخل عددًا بين 1 و100.")
             return
     except ValueError:
         print("الرجاء إدخال رقم صحيح.")
@@ -118,14 +192,14 @@ def main():
     print("\n1 - ثلاثة أحرف")
     print("2 - أربعة أحرف")
     print("3 - خليط من 3 و4 أحرف")
-    choice = input("اختيارك: ").strip()
 
+    choice = input("اختر الطول: ").strip()
     if choice not in ("1", "2", "3"):
         print("اختيار غير صحيح.")
         return
 
     letters_only = (
-        input("حروف فقط؟ (y/n): ").strip().lower() == "y"
+        input("حروف فقط دون أرقام؟ (y/n): ").strip().lower() == "y"
     )
 
     if choice == "1":
@@ -135,70 +209,111 @@ def main():
     else:
         lengths = [3, 4]
 
-    candidates = set()
-    while len(candidates) < amount:
-        length = random.choice(lengths)
-        candidates.add(generate_username(length, letters_only))
+    charset = LETTERS if letters_only else ALNUM
 
-    available = []
-    taken = []
-    unknown = []
-    stopped = False
+    total_possible = sum(
+        len(charset) ** length for length in lengths
+    )
 
-    print("\nبدأ الفحص...\n")
+    stamp = timestamp()
+    available_path = os.path.join(
+        OUTPUT_DIR, f"available_{stamp}.txt"
+    )
+    unknown_path = os.path.join(
+        OUTPUT_DIR, f"unknown_{stamp}.txt"
+    )
 
-    for index, name in enumerate(candidates, start=1):
-        status = check_username(name)
-        print(f"[{index}/{amount}] {name} -> {status}")
+    found = []
+    seen = set()
+    attempts = 0
+    consecutive_errors = 0
 
-        if status == "available":
-            available.append(name)
-        elif status == "taken":
-            taken.append(name)
-        elif status == "rate_limited":
-            unknown.append(name + " | rate_limited")
+    print("\nبدأ البحث المستمر...")
+    print(f"الهدف: {target} أسماء مؤكدة بحسب استجابة الخدمة.")
+    print("النتائج تحفظ فور العثور عليها.\n")
+
+    try:
+        while len(found) < target:
+            if len(seen) >= total_possible:
+                print("\nانتهت جميع التركيبات الممكنة لهذا الاختيار.")
+                break
+
+            length = random.choice(lengths)
+            name = generate_username(length, letters_only)
+
+            if name in seen or not valid_username(name):
+                continue
+
+            seen.add(name)
+            attempts += 1
+
+            status = check_with_retries(name)
+
             print(
-                "\nتم إيقاف الفحص لأن الخدمة حدّت الطلبات. "
-                "أعد التشغيل لاحقًا بدل تجاوز الحد."
+                f"[محاولة {attempts}] {name} -> {status}"
             )
-            stopped = True
-            break
-        else:
-            unknown.append(name + " | " + status)
 
-        if index < amount:
+            if status == "available":
+                found.append(name)
+                save_available(found, available_path)
+                consecutive_errors = 0
+
+                print(
+                    f"\n[متاح بحسب الاستجابة] {name}"
+                    f" | العدد المكتشف: {len(found)}/{target}\n"
+                )
+
+            elif status == "taken":
+                consecutive_errors = 0
+
+            elif status == "invalid":
+                consecutive_errors += 1
+                append_line(
+                    unknown_path,
+                    f"{name} | invalid_or_rejected",
+                )
+
+            else:
+                consecutive_errors += 1
+                append_line(
+                    unknown_path,
+                    f"{name} | {status}",
+                )
+
+            if consecutive_errors >= MAX_CONSECUTIVE_SERVICE_ERRORS:
+                print(
+                    "\nتوقفت الأداة لأن الفحص فشل مرارًا. "
+                    "قد تكون الواجهة غير متاحة أو ترفض الطلبات."
+                )
+                print("لم يتم اعتبار الأسماء غير المؤكدة متاحة.")
+                break
+
+            # إيقاع هادئ للطلبات، دون تجاوز حدود الخدمة
             time.sleep(2)
 
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    except KeyboardInterrupt:
+        print("\nأوقف المستخدم البحث. حفظ النتائج المكتشفة.")
 
-    save_file(
-        os.path.join(OUTPUT_DIR, f"available_{stamp}.txt"),
-        available,
-    )
-    save_file(
-        os.path.join(OUTPUT_DIR, f"taken_{stamp}.txt"),
-        taken,
-    )
-    save_file(
-        os.path.join(OUTPUT_DIR, f"unknown_{stamp}.txt"),
-        unknown,
-    )
+    finally:
+        save_available(found, available_path)
 
-    print("\n" + "=" * 48)
-    print(f"متاح بحسب الاستجابة: {len(available)}")
-    print(f"مشغول بحسب الاستجابة: {len(taken)}")
-    print(f"غير مؤكد: {len(unknown)}")
-    print(f"النتائج محفوظة في مجلد: {OUTPUT_DIR}")
+        print("\n" + "=" * 54)
+        print(f"إجمالي المحاولات: {attempts}")
+        print(f"الأسماء المتاحة بحسب الاستجابة: {len(found)}")
+        print(f"ملف الأسماء: {available_path}")
+        print(f"ملف الحالات غير المؤكدة: {unknown_path}")
+        print("=" * 54)
 
-    if stopped:
-        print("الفحص توقف بسبب تحديد الطلبات.")
+        if found:
+            print("\nالأسماء التي أعادت الخدمة أنها غير مأخوذة:")
+            for name in found:
+                print("  " + name)
 
-    print("تحقق من الاسم نهائيًا في إعدادات ديسكورد.")
-    print("=" * 48)
+        print(
+            "\nالإتاحة قد تتغير قبل تسجيل الاسم؛ "
+            "تحقق منه في ديسكورد قبل الاعتماد عليه."
+        )
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nتم إيقاف البرنامج.")
+    main()
