@@ -1,481 +1,394 @@
-
 import os
 import re
 import time
-import random
 import string
-from datetime import datetime
+import secrets
+from pathlib import Path
 
 import requests
 
 # =========================================================
-# Discord Username Checker
-# لا يحتاج إلى API Token
-# ملاحظة: نقطة الفحص غير الرسمية قد تتغير أو تتوقف.
+# Discord Username Checker v2
+# ملاحظة: نقطة الفحص غير رسمية وقد تتغير أو تتوقف في أي وقت.
 # =========================================================
 
-API_URL = (
-    "https://discord.com/api/v9/"
-    "unique-username/username-attempt-unauthed"
-)
+API_URL = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
+USER_AGENT = "DiscordUsernameChecker/2.0 (personal use)"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_DIR = os.path.join(BASE_DIR, "results")
-
-AVAILABLE_FILE = os.path.join(RESULTS_DIR, "available.txt")
-TAKEN_FILE = os.path.join(RESULTS_DIR, "taken.txt")
-UNKNOWN_FILE = os.path.join(RESULTS_DIR, "unknown.txt")
-CHECKED_FILE = os.path.join(RESULTS_DIR, "checked.txt")
-
-# مهلة بين الطلبات لتقليل احتمالية التقييد
-REQUEST_DELAY = 2.0
+REQUEST_DELAY = 2.0        # ثواني بين كل اسم والذي بعده
+TIMEOUT = 15
 MAX_RETRIES = 2
-MAX_RETRY_WAIT = 120
+MAX_RETRY_WAIT = 120       # أقصى مدة انتظار مقبولة عند 429
+MAX_GENERATE = 10000
 
-CHARS = string.ascii_lowercase + string.digits
+BASE_DIR = Path(__file__).resolve().parent
+RESULTS_DIR = BASE_DIR / "results"
+FILES = {
+    "available": RESULTS_DIR / "available.txt",
+    "taken": RESULTS_DIR / "taken.txt",
+    "unknown": RESULTS_DIR / "unknown.txt",
+    "checked": RESULTS_DIR / "checked.txt",
+}
 
-os.makedirs(RESULTS_DIR, exist_ok=True)
+USERNAME_RE = re.compile(r"[a-z0-9_.]{2,32}")
 
-session = requests.Session()
-session.headers.update({
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "User-Agent": "DiscordUsernameChecker/1.0",
-})
+LENGTH_OPTIONS = {
+    "1": ("ثلاثة أحرف", [3]),
+    "2": ("أربعة أحرف", [4]),
+    "3": ("ثلاثة أو أربعة أحرف", [3, 4]),
+}
+
+CHARSET_OPTIONS = {
+    "1": ("أحرف إنجليزية فقط", string.ascii_lowercase),
+    "2": ("أرقام فقط", string.digits),
+    "3": ("أحرف وأرقام", string.ascii_lowercase + string.digits),
+}
+
 
 # =========================================================
-# الملفات
+# التخزين
 # =========================================================
 
-def read_names(path):
-    if not os.path.exists(path):
-        return set()
+class Store:
+    def __init__(self):
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        self.data = {key: self._read(path) for key, path in FILES.items()}
 
-    try:
-        with open(path, "r", encoding="utf-8") as file:
-            return {
-                line.strip().lower()
-                for line in file
-                if line.strip()
-            }
-    except OSError:
-        return set()
+    @staticmethod
+    def _read(path):
+        if not path.exists():
+            return set()
+        with path.open("r", encoding="utf-8") as file:
+            return {line.strip().lower() for line in file if line.strip()}
 
-
-def append_name(path, username):
-    with open(path, "a", encoding="utf-8") as file:
-        file.write(username.lower() + "\n")
-
-
-def record_result(username, status):
-    username = username.lower()
-
-    if status == "available":
-        append_name(AVAILABLE_FILE, username)
-    elif status == "taken":
-        append_name(TAKEN_FILE, username)
-    else:
-        append_name(UNKNOWN_FILE, username)
-
-    append_name(CHECKED_FILE, username)
-
-
-def load_unknown():
-    return sorted(read_names(UNKNOWN_FILE))
-
-
-def remove_from_unknown(username):
-    names = read_names(UNKNOWN_FILE)
-    names.discard(username.lower())
-
-    with open(UNKNOWN_FILE, "w", encoding="utf-8") as file:
-        for name in sorted(names):
+    def _append(self, key, name):
+        if name in self.data[key]:
+            return
+        self.data[key].add(name)
+        with FILES[key].open("a", encoding="utf-8") as file:
             file.write(name + "\n")
 
+    def record(self, name, status):
+        self._append(status, name)
+        self._append("checked", name)
+
+    def remove_unknown(self, name):
+        if name not in self.data["unknown"]:
+            return
+        self.data["unknown"].discard(name)
+        tmp = FILES["unknown"].with_suffix(".tmp")
+        tmp.write_text(
+            "".join(f"{n}\n" for n in sorted(self.data["unknown"])),
+            encoding="utf-8",
+        )
+        os.replace(tmp, FILES["unknown"])
+
+    def seen(self):
+        return (
+            self.data["checked"]
+            | self.data["available"]
+            | self.data["taken"]
+            | self.data["unknown"]
+        )
+
 
 # =========================================================
-# التحقق من صيغة اليوزر
+# التحقق المحلي من الصيغة (ليس فحص الإتاحة)
 # =========================================================
 
-def valid_username(username):
-    username = username.strip().lower()
-
-    # فحص الصيغة المحلية فقط، وليس الإتاحة
-    if not 2 <= len(username) <= 32:
+def is_valid(name):
+    if not USERNAME_RE.fullmatch(name):
         return False
-
-    if not re.fullmatch(r"[a-z0-9_.]+", username):
+    if name.startswith(".") or name.endswith(".") or ".." in name:
         return False
-
-    if username.startswith(".") or username.endswith("."):
+    # قاعدة ديسكورد: اليوزر لا يحتوي على كلمة discord
+    if "discord" in name:
         return False
-
-    if ".." in username:
-        return False
-
     return True
 
 
 # =========================================================
-# فحص الإتاحة
+# الاتصال بديسكورد
 # =========================================================
 
-def check_username(username):
-    username = username.strip().lower()
+def make_session():
+    session = requests.Session()
+    session.headers.update({
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": USER_AGENT,
+    })
+    return session
 
-    if not valid_username(username):
-        return "invalid", "صيغة اليوزر غير مقبولة محليًا"
 
+def snippet(resp):
+    text = (resp.text or "").strip().replace("\n", " ")
+    return text[:200] if text else "(رد فارغ)"
+
+
+def parse_json(resp):
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def retry_after(resp, body):
+    value = resp.headers.get("Retry-After")
+    if value is None and isinstance(body, dict):
+        value = body.get("retry_after")
+    try:
+        return max(1.0, float(value))
+    except (TypeError, ValueError):
+        return 10.0
+
+
+def check_username(session, name):
     for attempt in range(MAX_RETRIES + 1):
-        try:
-            response = session.post(
-                API_URL,
-                json={"username": username},
-                timeout=15,
-            )
+        last = attempt == MAX_RETRIES
 
-        except requests.RequestException as error:
-            if attempt < MAX_RETRIES:
+        try:
+            resp = session.post(API_URL, json={"username": name}, timeout=TIMEOUT)
+        except requests.RequestException as err:
+            if not last:
                 time.sleep(REQUEST_DELAY * (attempt + 1))
                 continue
+            return "unknown", f"خطأ اتصال: {err}"
 
-            return "unknown", f"خطأ اتصال: {error}"
+        body = parse_json(resp)
 
-        if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After", "10")
+        if resp.status_code == 200 and isinstance(body, dict):
+            taken = body.get("taken")
+            if isinstance(taken, bool):
+                return ("taken" if taken else "available"), "نتيجة واضحة"
 
-            try:
-                wait_seconds = max(1, float(retry_after))
-            except (TypeError, ValueError):
-                wait_seconds = 10
-
-            # لا ننتظر مدة ضخمة داخل البرنامج
-            if attempt < MAX_RETRIES and wait_seconds <= MAX_RETRY_WAIT:
-                print(
-                    f"\n[!] ديسكورد طلب الانتظار "
-                    f"{wait_seconds:g} ثانية."
-                )
-                time.sleep(wait_seconds)
+        if resp.status_code == 429:
+            wait = retry_after(resp, body)
+            if not last and wait <= MAX_RETRY_WAIT:
+                print(f"\n    [!] ديسكورد طلب انتظار {wait:g} ثانية...")
+                time.sleep(wait)
                 continue
-
             return "blocked", "تقييد طلبات (429)"
 
-        if response.status_code in (401, 403):
-            return "blocked", (
-                f"رفض ديسكورد الطلب: HTTP {response.status_code}"
-            )
+        if resp.status_code in (401, 403):
+            return "blocked", f"HTTP {resp.status_code}: {snippet(resp)}"
 
-        if response.status_code >= 500:
-            if attempt < MAX_RETRIES:
-                time.sleep(REQUEST_DELAY * (attempt + 1))
-                continue
+        if resp.status_code == 400:
+            return "invalid", f"ديسكورد رفض الصيغة: {snippet(resp)}"
 
-            return "unknown", (
-                f"خطأ من الخادم: HTTP {response.status_code}"
-            )
+        if resp.status_code >= 500 and not last:
+            time.sleep(REQUEST_DELAY * (attempt + 1))
+            continue
 
-        if response.status_code != 200:
-            return "unknown", (
-                f"استجابة غير متوقعة: HTTP {response.status_code}"
-            )
+        return "unknown", f"HTTP {resp.status_code}: {snippet(resp)}"
 
-        try:
-            data = response.json()
-        except ValueError:
-            return "unknown", "الاستجابة ليست JSON صالحًا"
-
-        # لا نستنتج شيئًا إلا إذا وصلنا حقل taken بصيغة Boolean
-        taken = data.get("taken")
-
-        if isinstance(taken, bool):
-            if taken:
-                return "taken", "الاسم مأخوذ حسب استجابة الفحص"
-
-            return "available", "الاسم غير مأخوذ حسب استجابة الفحص"
-
-        return "unknown", "الاستجابة لا تحتوي نتيجة إتاحة مؤكدة"
-
-    return "unknown", "انتهت محاولات الفحص"
+    return "unknown", "انتهت المحاولات"
 
 
 # =========================================================
-# توليد أسماء جديدة
+# الفحص
 # =========================================================
 
-def generate_username(length, mode, used):
-    if mode == "letters":
-        alphabet = string.ascii_lowercase
-    elif mode == "numbers":
-        alphabet = string.digits
-    else:
-        alphabet = CHARS
-
-    for _ in range(5000):
-        username = "".join(
-            random.choices(alphabet, k=length)
-        )
-
-        if username not in used and valid_username(username):
-            used.add(username)
-            return username
-
-    return None
+LABELS = {
+    "available": "[+] متاح",
+    "taken": "[-] مأخوذ",
+    "unknown": "[?] غير محسوم",
+    "invalid": "[!] مرفوض صيغةً",
+    "blocked": "[!!] توقف الفحص",
+}
 
 
-def choose_length():
-    print("\nاختر طول اليوزر:")
-    print("1. ثلاثة أحرف")
-    print("2. أربعة أحرف")
-    print("3. ثلاثة أو أربعة أحرف")
-
-    choice = input("اختيارك: ").strip()
-
-    if choice == "1":
-        return [3]
-    if choice == "2":
-        return [4]
-    if choice == "3":
-        return [3, 4]
-
-    print("اختيار غير صحيح.")
-    return None
-
-
-def choose_charset():
-    print("\nاختر نوع الأحرف:")
-    print("1. أحرف إنجليزية فقط")
-    print("2. أرقام فقط")
-    print("3. أحرف وأرقام")
-
-    choice = input("اختيارك: ").strip()
-
-    return {
-        "1": "letters",
-        "2": "numbers",
-        "3": "mixed",
-    }.get(choice)
-
-
-# =========================================================
-# واجهة الفحص
-# =========================================================
-
-def print_status(username, status, detail):
-    labels = {
-        "available": "[+] متاح حسب الاستجابة",
-        "taken": "[-] مأخوذ حسب الاستجابة",
-        "unknown": "[?] غير محسوم",
-        "invalid": "[!] صيغة غير صالحة",
-        "blocked": "[!] توقف الفحص",
-    }
-
-    print(f"{labels.get(status, status)} | {username} | {detail}")
-
-
-def scan_names(names, skip_checked=True):
-    checked = read_names(CHECKED_FILE)
-    available = read_names(AVAILABLE_FILE)
-    taken_names = read_names(TAKEN_FILE)
-
+def scan(store, session, names, skip_checked=True):
     total = len(names)
     found = 0
 
     print(f"\nبدء الفحص: {total} اسمًا")
     print("-" * 60)
 
-    for index, username in enumerate(names, start=1):
-        username = username.strip().lower()
-
-        if not username:
+    for index, name in enumerate(names, start=1):
+        if skip_checked and name in store.data["checked"]:
+            print(f"[تخطي] {name} سبق فحصه")
             continue
 
-        if skip_checked and username in checked:
-            print(f"[تخطي] {username} سبق فحصه")
+        if not is_valid(name):
+            print(f"[!] صيغة غير صالحة محليًا: {name}")
             continue
 
-        if not valid_username(username):
-            print_status(
-                username,
-                "invalid",
-                "صيغة غير صالحة"
-            )
-            continue
+        print(f"[{index}/{total}] {name} ...", end=" ", flush=True)
+        status, detail = check_username(session, name)
+        print(f"{LABELS[status]} | {detail}")
 
-        if username in available or username in taken_names:
-            print(f"[تخطي] {username} موجود في النتائج السابقة")
-            continue
-
-        print(f"\n[{index}/{total}] فحص {username} ...")
-
-        status, detail = check_username(username)
-        print_status(username, status, detail)
+        if status == "blocked":
+            print("\n[!] ديسكورد رفض الطلبات، تم إيقاف الفحص. لم يُحفظ هذا الاسم.")
+            break
 
         if status in ("available", "taken", "unknown"):
-            record_result(username, status)
+            store.record(name, status)
+            store.remove_unknown(name) if status != "unknown" else None
 
         if status == "available":
             found += 1
-
-        if status == "blocked":
-            print(
-                "\nتم إيقاف الفحص لحماية الجلسة من "
-                "استمرار الطلبات بعد رفضها أو تقييدها."
-            )
-            break
 
         if index < total:
             time.sleep(REQUEST_DELAY)
 
     print("\n" + "=" * 60)
-    print(f"الأسماء المتاحة التي أكدتها الاستجابة: {found}")
-    print(f"إجمالي الأسماء المحفوظة كمتاحة: {len(read_names(AVAILABLE_FILE))}")
-    print(f"إجمالي الأسماء المحفوظة كمأخوذة: {len(read_names(TAKEN_FILE))}")
-    print(f"إجمالي النتائج غير المحسومة: {len(read_names(UNKNOWN_FILE))}")
+    print(f"متاح حسب الاستجابة في هذه الجلسة: {found}")
+    print(f"إجمالي المتاح المحفوظ: {len(store.data['available'])}")
+    print(f"إجمالي المأخوذ المحفوظ: {len(store.data['taken'])}")
+    print(f"إجمالي غير المحسوم: {len(store.data['unknown'])}")
     print(f"مجلد النتائج: {RESULTS_DIR}")
     print("=" * 60)
 
 
-def generate_and_scan():
-    lengths = choose_length()
-    if not lengths:
+# =========================================================
+# القوائم والتوليد
+# =========================================================
+
+def ask_choice(title, options):
+    print(f"\n{title}")
+    for key, (label, _) in options.items():
+        print(f"{key}. {label}")
+    choice = input("اختيارك: ").strip()
+    if choice not in options:
         print("اختيار غير صحيح.")
+        return None
+    return options[choice][1]
+
+
+def generate(store, lengths, alphabet, amount):
+    used = store.seen()
+    result = []
+    tries = 0
+    limit = amount * 200
+
+    while len(result) < amount and tries < limit:
+        tries += 1
+        size = secrets.choice(lengths)
+        name = "".join(secrets.choice(alphabet) for _ in range(size))
+
+        if name in used or not is_valid(name):
+            continue
+
+        used.add(name)
+        result.append(name)
+
+    return result
+
+
+def generate_and_scan(store, session):
+    lengths = ask_choice("اختر طول اليوزر:", LENGTH_OPTIONS)
+    if not lengths:
         return
 
-    mode = choose_charset()
-    if not mode:
-        print("اختيار غير صحيح.")
+    alphabet = ask_choice("اختر نوع الأحرف:", CHARSET_OPTIONS)
+    if not alphabet:
         return
 
     try:
         amount = int(input("\nكم اسمًا تريد توليده؟ ").strip())
-        if not 1 <= amount <= 10000:
-            print("اختر رقمًا من 1 إلى 10000.")
-            return
     except ValueError:
         print("أدخل رقمًا صحيحًا.")
         return
 
-    checked = read_names(CHECKED_FILE)
-    available = read_names(AVAILABLE_FILE)
-    taken_names = read_names(TAKEN_FILE)
-    unknown = read_names(UNKNOWN_FILE)
+    if not 1 <= amount <= MAX_GENERATE:
+        print(f"اختر رقمًا من 1 إلى {MAX_GENERATE}.")
+        return
 
-    used = checked | available | taken_names | unknown
-    names = []
-
-    attempts = 0
-    max_generation_attempts = amount * 100
-
-    while len(names) < amount and attempts < max_generation_attempts:
-        attempts += 1
-        length = random.choice(lengths)
-        username = generate_username(length, mode, used)
-
-        if username:
-            names.append(username)
-
+    names = generate(store, lengths, alphabet, amount)
     if not names:
         print("تعذر توليد أسماء جديدة ضمن الإعدادات الحالية.")
         return
 
     print(f"\nتم توليد {len(names)} اسمًا جديدًا.")
-    scan_names(names)
+    scan(store, session, names)
 
 
-def check_custom_list():
-    path = input(
-        "\nاكتب مسار ملف TXT يحتوي اسمًا واحدًا في كل سطر: "
-    ).strip().strip('"')
+def scan_file(store, session):
+    raw = input("\nمسار ملف TXT (اسم في كل سطر): ").strip().strip('"')
+    path = Path(raw)
 
-    if not os.path.isfile(path):
+    if not path.is_file():
         print("الملف غير موجود.")
         return
 
     try:
-        with open(path, "r", encoding="utf-8-sig") as file:
-            names = [
-                line.strip().lower()
-                for line in file
-                if line.strip()
-            ]
-    except OSError as error:
-        print(f"تعذر قراءة الملف: {error}")
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError as err:
+        print(f"تعذر قراءة الملف: {err}")
         return
 
-    # إزالة التكرار مع الحفاظ على ترتيب الأسماء
-    names = list(dict.fromkeys(names))
+    names = list(dict.fromkeys(
+        line.strip().lower() for line in text.splitlines() if line.strip()
+    ))
 
     if not names:
         print("الملف فارغ.")
         return
 
-    scan_names(names)
+    scan(store, session, names)
 
 
-def retry_unknown():
-    names = load_unknown()
-
+def retry_unknown(store, session):
+    names = sorted(store.data["unknown"])
     if not names:
-        print("\nلا توجد أسماء غير محسومة لإعادة فحصها.")
+        print("\nلا توجد أسماء غير محسومة.")
         return
 
     print(f"\nستتم إعادة فحص {len(names)} اسمًا.")
-    print("إذا ظهرت قيود، سيتوقف الفحص.")
-
-    confirmation = input("اكتب نعم للمتابعة: ").strip()
-
-    if confirmation != "نعم":
+    if input("اكتب نعم للمتابعة: ").strip() != "نعم":
         print("تم الإلغاء.")
         return
 
-    # إعادة الفحص مسموحة حتى لو سبق تسجيل الاسم
-    for username in names:
-        remove_from_unknown(username)
-
-    scan_names(names, skip_checked=False)
+    scan(store, session, names, skip_checked=False)
 
 
-def show_statistics():
-    available = read_names(AVAILABLE_FILE)
-    taken = read_names(TAKEN_FILE)
-    unknown = read_names(UNKNOWN_FILE)
-    checked = read_names(CHECKED_FILE)
-
+def show_statistics(store):
     print("\n========== الإحصائيات ==========")
-    print(f"المتاح حسب الاستجابة: {len(available)}")
-    print(f"المأخوذ حسب الاستجابة: {len(taken)}")
-    print(f"غير المحسوم: {len(unknown)}")
-    print(f"الأسماء التي سبق فحصها: {len(checked)}")
-    print(f"الملفات: {RESULTS_DIR}")
+    print(f"المتاح حسب الاستجابة: {len(store.data['available'])}")
+    print(f"المأخوذ حسب الاستجابة: {len(store.data['taken'])}")
+    print(f"غير المحسوم: {len(store.data['unknown'])}")
+    print(f"سبق فحصه: {len(store.data['checked'])}")
+    print(f"مجلد النتائج: {RESULTS_DIR}")
     print("================================")
 
 
+# =========================================================
+# القائمة الرئيسية
+# =========================================================
+
 def main():
-    while True:
-        print("\n" + "=" * 45)
-        print("      Discord Username Checker")
-        print("=" * 45)
-        print("1. توليد يوزرات وفحصها")
-        print("2. فحص قائمة من ملف TXT")
-        print("3. إعادة فحص النتائج غير المحسومة")
-        print("4. عرض الإحصائيات")
-        print("5. خروج")
+    store = Store()
+    session = make_session()
 
-        choice = input("\nاختيارك: ").strip()
+    try:
+        while True:
+            print("\n" + "=" * 45)
+            print("      Discord Username Checker v2")
+            print("=" * 45)
+            print("1. توليد يوزرات وفحصها")
+            print("2. فحص قائمة من ملف TXT")
+            print("3. إعادة فحص النتائج غير المحسومة")
+            print("4. عرض الإحصائيات")
+            print("5. خروج")
 
-        if choice == "1":
-            generate_and_scan()
-        elif choice == "2":
-            check_custom_list()
-        elif choice == "3":
-            retry_unknown()
-        elif choice == "4":
-            show_statistics()
-        elif choice == "5":
-            print("تم إغلاق الأداة.")
-            break
-        else:
-            print("اختيار غير صحيح.")
+            choice = input("\nاختيارك: ").strip()
+
+            if choice == "1":
+                generate_and_scan(store, session)
+            elif choice == "2":
+                scan_file(store, session)
+            elif choice == "3":
+                retry_unknown(store, session)
+            elif choice == "4":
+                show_statistics(store)
+            elif choice == "5":
+                print("تم إغلاق الأداة.")
+                break
+            else:
+                print("اختيار غير صحيح.")
+    finally:
+        session.close()
 
 
 if __name__ == "__main__":
@@ -483,5 +396,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\nتم إيقاف الأداة.")
-    finally:
-        session.close()
